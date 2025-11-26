@@ -19,7 +19,14 @@ import concurrent.futures
 from tqdm import tqdm
 import numpy as np
 import cv2
-from umi.common.cv_util import draw_predefined_mask
+# from umi.common.cv_util import draw_predefined_mask
+from umi.common.cv_util_realsense import (
+    draw_rgb_predefined_mask,
+    draw_im_l_infrared_mask,
+    draw_im_r_infrared_mask,
+    RGB_IMG_SHAPE,
+    IR_IMG_SHAPE
+)
 
 # %%
 @click.command()
@@ -29,75 +36,77 @@ from umi.common.cv_util import draw_predefined_mask
 @click.option('-np', '--no_docker_pull', is_flag=True, default=False, help="pull docker image from docker hub")
 @click.option('-nm', '--no_mask', is_flag=True, default=False, help="Whether to mask out gripper and mirrors. Set if map is created with bare GoPro no on gripper.")
 def main(input_dir, map_path, docker_image, no_docker_pull, no_mask):
-    video_dir = pathlib.Path(os.path.expanduser(input_dir)).absolute()
-    for fn in ['raw_video.mp4', 'imu_data.json']:
-        assert video_dir.joinpath(fn).is_file()
+    bag_dir = pathlib.Path(os.path.expanduser(input_dir)).absolute()
+
+    # for fn in ['raw_video.mp4', 'imu_data.json']:
+    for fn in ['raw_video.mp4']:
+        assert bag_dir.joinpath(fn).is_file()
 
     if map_path is None:
-        map_path = video_dir.joinpath('map_atlas.osa')
+        map_path = bag_dir.joinpath('map_atlas.osa')
     else:
         map_path = pathlib.Path(os.path.expanduser(map_path)).absolute()
     map_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # pull docker
-    if not no_docker_pull:
-        print(f"Pulling docker image {docker_image}")
-        cmd = [
-            'docker',
-            'pull',
-            docker_image
-        ]
-        p = subprocess.run(cmd)
-        if p.returncode != 0:
-            print("Docker pull failed!")
-            exit(1)
+    csv_path = bag_dir.joinpath('mapping_camera_trajectory.csv')
+    bag_path = bag_dir.joinpath("raw_bag.bag")
+    video_path = bag_dir.joinpath('raw_video.mp4')
+    json_path = bag_dir.joinpath('imu_data.json')
+    mask_path = bag_dir.joinpath('slam_mask.png')
 
-    mount_target = pathlib.Path('/data')
-    csv_path = mount_target.joinpath('mapping_camera_trajectory.csv')
-    video_path = mount_target.joinpath('raw_video.mp4')
-    json_path = mount_target.joinpath('imu_data.json')
-    mask_path = mount_target.joinpath('slam_mask.png')
     if not no_mask:
-        mask_write_path = video_dir.joinpath('slam_mask.png')
-        slam_mask = np.zeros((2028, 2704), dtype=np.uint8)
-        slam_mask = draw_predefined_mask(
-            slam_mask, color=255, mirror=True, gripper=False, finger=True)
-        cv2.imwrite(str(mask_write_path.absolute()), slam_mask)
+        # left, right
+        ir_l_slam_mask_path = bag_dir.joinpath('ir_l_slam_mask.png')
+        ir_r_slam_mask_path = bag_dir.joinpath('ir_r_slam_mask.png')
+
+        slam_mask = np.zeros(IR_IMG_SHAPE, dtype=np.uint8)
+        slam_mask = draw_im_l_infrared_mask(slam_mask, color=255)
+        cv2.imwrite(str(ir_l_slam_mask_path.absolute()), slam_mask)
+
+        slam_mask = np.zeros(IR_IMG_SHAPE, dtype=np.uint8)
+        slam_mask = draw_im_r_infrared_mask(slam_mask, color=255)
+        cv2.imwrite(str(ir_r_slam_mask_path.absolute()), slam_mask)
+
+        # mask_write_path = bag_dir.joinpath('slam_mask.png')
+        # slam_mask = np.zeros(RGB_IMG_SHAPE, dtype=np.uint8)
+        # slam_mask = draw_rgb_predefined_mask(slam_mask, color=255)
+        # cv2.imwrite(str(mask_write_path.absolute()), slam_mask)
 
     map_mount_source = pathlib.Path(map_path)
-    map_mount_target = pathlib.Path('/map').joinpath(map_mount_source.name)
 
-    # run SLAM
+    ORB_SLAM3_ROOT = pathlib.Path("~/Desktop/study/ORB_SLAM3").expanduser()
+    binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/stereo_inertial_realsense_D435i")
+    setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/RealSense_D435i.yaml")
+    voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
+
     cmd = [
-        'docker',
-        'run',
-        '--rm', # delete after finish
-        '--volume', str(video_dir) + ':' + '/data',
-        '--volume', str(map_mount_source.parent) + ':' + str(map_mount_target.parent),
-        docker_image,
-        '/ORB_SLAM3/Examples/Monocular-Inertial/gopro_slam',
-        '--vocabulary', '/ORB_SLAM3/Vocabulary/ORBvoc.txt',
-        '--setting', '/ORB_SLAM3/Examples/Monocular-Inertial/gopro10_maxlens_fisheye_setting_v1_720.yaml',
-        '--input_video', str(video_path),
-        '--input_imu_json', str(json_path),
-        '--output_trajectory_csv', str(csv_path),
-        '--save_map', str(map_mount_target)
+        str(binary_path),
+        "--setting", str(setting_path), 
+        "--vocabulary", str(voca_path),
+        "--bag_path", str(bag_path),
+        "--output_trajectory_csv", str(csv_path),
+        "--save_map", str(map_mount_source),
     ]
+
     if not no_mask:
         cmd.extend([
-            '--mask_img', str(mask_path)
+            # '--mask_img', str(mask_path),
+            "--ir_l_mask", str(ir_l_slam_mask_path),
+            "--ir_r_mask", str(ir_r_slam_mask_path),
         ])
+    
+    print(cmd)
 
-    stdout_path = video_dir.joinpath('slam_stdout.txt')
-    stderr_path = video_dir.joinpath('slam_stderr.txt')
+    stdout_path = bag_dir.joinpath('slam_stdout.txt')
+    stderr_path = bag_dir.joinpath('slam_stderr.txt')
 
     result = subprocess.run(
         cmd,
-        cwd=str(video_dir),
+        cwd=str(bag_dir),
         stdout=stdout_path.open('w'),
         stderr=stderr_path.open('w')
     )
-    print(result)
+    print(f"[INFO] create map {result=}")
 
 
 # %%
