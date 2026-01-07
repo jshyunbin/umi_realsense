@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/05_run_calibrations.py data_workspace/cup_in_the_wild/20240105_zhenjia_packard_2nd_conference_room
+python scripts_slam_pipeline/05_run_calibrations.py /data/UMI
 """
 # %%
 import sys

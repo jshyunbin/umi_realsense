@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/03_batch_slam.py -i data_workspace/fold_cloth_20231214/demos
+python scripts_slam_pipeline/03_batch_slam.py -i /data/UMI/demos -m /data/UMI/demos/mapping/map_atlas.osa
 """
 # %%
 import sys
@@ -76,17 +76,17 @@ def main(input_dir,
         num_workers = multiprocessing.cpu_count() // 2
 
     # pull docker
-    if not no_docker_pull:
-        print(f"Pulling docker image {docker_image}")
-        cmd = [
-            'docker',
-            'pull',
-            docker_image
-        ]
-        p = subprocess.run(cmd)
-        if p.returncode != 0:
-            print("Docker pull failed!")
-            exit(1)
+    # if not no_docker_pull:
+    #     print(f"Pulling docker image {docker_image}")
+    #     cmd = [
+    #         'docker',
+    #         'pull',
+    #         docker_image
+    #     ]
+    #     p = subprocess.run(cmd)
+    #     if p.returncode != 0:
+    #         print("Docker pull failed!")
+    #         exit(1)
 
     with tqdm(total=len(input_bag_dirs)) as pbar:
         # one chunk per thread, therefore no synchronization needed
@@ -103,8 +103,6 @@ def main(input_dir,
                 # mount_target = pathlib.Path('/data')
                 mount_target = bag_dir
                 csv_path = mount_target.joinpath('camera_trajectory.csv')
-                video_path = mount_target.joinpath('raw_video.mp4')
-                json_path = mount_target.joinpath('imu_data.json')
                 bag_path = bag_dir.joinpath("raw_bag.bag")
 
                 # NOTE
@@ -134,10 +132,11 @@ def main(input_dir,
                     slam_mask = draw_im_r_infrared_mask(slam_mask, color=255)
                     cv2.imwrite(str(ir_r_slam_mask_path.absolute()), slam_mask)
 
-                map_mount_source = map_path
-                map_mount_target = pathlib.Path('/map').joinpath(map_mount_source.name)
+                # mount location for docker implementation
+                # map_mount_source = map_path
+                # map_mount_target = pathlib.Path('/map').joinpath(map_mount_source.name)
 
-                ORB_SLAM3_ROOT = pathlib.Path("~/Desktop/study/ORB_SLAM3").expanduser()
+                ORB_SLAM3_ROOT = pathlib.Path("/data/ORB_SLAM3").expanduser()
                 binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/stereo_inertial_realsense_D435i")
                 setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/RealSense_D435i.yaml")
                 voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
@@ -150,7 +149,7 @@ def main(input_dir,
                     "--vocabulary", str(voca_path),
                     "--bag_path", str(bag_path),
                     '--output_trajectory_csv', str(csv_path),
-                    '--load_map', str(map_mount_source),
+                    '--load_map', str(map_path),
                     # '--max_lost_frames', str(max_lost_frames)
                 ]
 

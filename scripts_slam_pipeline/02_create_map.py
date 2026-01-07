@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/00_process_videos.py -i data_workspace/toss_objects/20231113/mapping
+python scripts_slam_pipeline/02_create_map.py -i /data/UMI/demos/mapping 
 """
 
 # %%
@@ -74,7 +74,7 @@ def main(input_dir, map_path, docker_image, no_docker_pull, no_mask):
 
     map_mount_source = pathlib.Path(map_path)
 
-    ORB_SLAM3_ROOT = pathlib.Path("~/Desktop/study/ORB_SLAM3").expanduser()
+    ORB_SLAM3_ROOT = pathlib.Path("/data/ORB_SLAM3").expanduser()
     binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/stereo_inertial_realsense_D435i")
     setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/RealSense_D435i.yaml")
     voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
