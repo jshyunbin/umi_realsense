@@ -39,7 +39,7 @@ def process_bag_to_mp4(bag_path, mp4_path, color_topic_name, fps=30, enc="bgr8")
     Returns:
         bool: True if conversion was successful, False otherwise.
     """
-    print(f"[MP4] Converting {bag_path.parent.name} to {mp4_path.name}...")
+    # print(f"[MP4] Converting {bag_path.parent.name} to {mp4_path.name}...")
     
     bridge = CvBridge()
     video_writer = None
@@ -69,7 +69,7 @@ def process_bag_to_mp4(bag_path, mp4_path, color_topic_name, fps=30, enc="bgr8")
                     # Use absolute path for robustness
                     video_writer = cv2.VideoWriter(str(mp4_path.absolute()), fourcc, fps, (width, height), isColor=(enc == "bgr8"))
                     is_first_frame = False
-                    print(f"[MP4] Writer initialized for {bag_path.parent.name}: {width}x{height} @ {fps} FPS")
+                    # print(f"[MP4] Writer initialized for {bag_path.parent.name}: {width}x{height} @ {fps} FPS")
 
                 if video_writer is not None:
                     video_writer.write(cv_image)
@@ -83,9 +83,7 @@ def process_bag_to_mp4(bag_path, mp4_path, color_topic_name, fps=30, enc="bgr8")
         if video_writer is not None:
             video_writer.release()
             
-    if success:
-        print(f"[MP4] Successfully converted {bag_path.parent.name} to {mp4_path.name}")
-    else:
+    if not success:
         print(f"[MP4] Conversion failed for {bag_path.parent.name}: No image frames found or initialization failed.")
         
     return success
@@ -125,13 +123,15 @@ def main(fps, num_workers, session_dir):
         print(f'Found {len(input_bag_paths)} BAG files for MP4 conversion.')
 
         total_tasks = len(input_bag_paths) * len(topics)
+        
+        done = set()
 
         # ProcessPoolExecutor를 사용하여 병렬 처리 (CV 작업은 CPU 바인딩이므로 프로세스 풀 사용)
-        with tqdm(total=total_tasks) as pbar: 
+        with tqdm(total=total_tasks, desc="Converting BAG to MP4") as pbar: 
             with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
                 futures = set()
                 
-                for bag_path in tqdm(input_bag_paths, desc="Scheduling MP4 conversion"):
+                for bag_path in input_bag_paths:
                     bag_dir = bag_path.parent 
                     mp4_path = bag_dir.joinpath('raw_video.mp4')
                     
@@ -151,17 +151,21 @@ def main(fps, num_workers, session_dir):
                     
                         # 완료된 작업 처리 및 tqdm 업데이트
                         if len(futures) >= num_workers:
-                            completed, futures = concurrent.futures.wait(futures, 
+                            completed, futures = concurrent.futures.wait(futures,
                                 return_when=concurrent.futures.FIRST_COMPLETED)
                             pbar.update(len(completed))
+                            done.update(completed)
+                            
 
                 # 남아있는 모든 작업 완료 대기
-                completed, futures = concurrent.futures.wait(futures)
-                pbar.update(len(completed))
+                while futures:
+                    completed, futures = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                    done.update(completed)
+                    pbar.update(len(completed))
 
         # 결과 요약
-        results = [x.result() for x in completed if x.result() is True]
-        errors = [x.result() for x in completed if x.result() is False]
+        results = [x.result() for x in done if x.result() is True]
+        errors = [x.result() for x in done if x.result() is False]
         
         print("\nDone! Summary:")
         print(f"  Total successful MP4 conversions: {len(results)}")
