@@ -1,3 +1,6 @@
+"""
+python scripts_slam_pipeline/01_extract_videos.py /data/UMI
+"""
 import sys
 import os
 import pathlib
@@ -23,7 +26,7 @@ os.chdir(ROOT_DIR)
 
 # --- Helper Function: BAG to MP4 Conversion ---
 
-def process_bag_to_mp4(bag_path, mp4_path, color_topic_name='/device_0/sensor_1/Color_0/image/data', fps=10):
+def process_bag_to_mp4(bag_path, mp4_path, color_topic_name, fps=30, enc="bgr8"):
     """
     Core conversion function: Reads the color image topic from a BAG file and saves it as an MP4.
     
@@ -36,7 +39,7 @@ def process_bag_to_mp4(bag_path, mp4_path, color_topic_name='/device_0/sensor_1/
     Returns:
         bool: True if conversion was successful, False otherwise.
     """
-    print(f"[MP4] Converting {bag_path.parent.name} to MP4...")
+    print(f"[MP4] Converting {bag_path.parent.name} to {mp4_path.name}...")
     
     bridge = CvBridge()
     video_writer = None
@@ -47,21 +50,24 @@ def process_bag_to_mp4(bag_path, mp4_path, color_topic_name='/device_0/sensor_1/
             is_first_frame = True
             
             # Read BAG file and write frames to video
-            for topic_loop, msg_loop, t_loop in bag.read_messages(topics=[color_topic_name]):
+            for _, msg, _ in bag.read_messages(topics=[color_topic_name]):
                 # Check for correct message type
-                if msg_loop._type != Image._type: 
+                if msg._type != Image._type: 
                      continue
                 
                 # Convert image message to OpenCV Mat object
-                cv_image = bridge.imgmsg_to_cv2(msg_loop, desired_encoding="bgr8")
+                cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding=enc)
                 
                 if is_first_frame:
-                    height, width, layers = cv_image.shape
+                    if enc == "bgr8":
+                        height, width, _ = cv_image.shape
+                    else:
+                        height, width = cv_image.shape
                     
                     # VideoWriter setup (Using 'mp4v' codec for broad compatibility)
                     fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
                     # Use absolute path for robustness
-                    video_writer = cv2.VideoWriter(str(mp4_path.absolute()), fourcc, fps, (width, height))
+                    video_writer = cv2.VideoWriter(str(mp4_path.absolute()), fourcc, fps, (width, height), isColor=(enc == "bgr8"))
                     is_first_frame = False
                     print(f"[MP4] Writer initialized for {bag_path.parent.name}: {width}x{height} @ {fps} FPS")
 
@@ -71,7 +77,7 @@ def process_bag_to_mp4(bag_path, mp4_path, color_topic_name='/device_0/sensor_1/
             success = video_writer is not None and not is_first_frame
             
     except Exception as e:
-        print(f"[MP4] Conversion failed for {bag_path.parent.name} due to an exception: {e}")
+        print(f"[MP4] Conversion failed for {bag_path.parent.name}/{mp4_path.name} due to an exception: {e}")
         success = False
     finally:
         if video_writer is not None:
@@ -87,16 +93,23 @@ def process_bag_to_mp4(bag_path, mp4_path, color_topic_name='/device_0/sensor_1/
 # --- Main CLI Function ---
 
 @click.command(help='Extracts MP4 video from raw_bag.bag files in demos subdirectories.')
-@click.option('-c', '--color_topic', default='/device_0/sensor_1/Color_0/image/data', help="RealSense Color topic.")
 @click.option('-f', '--fps', type=int, default=30, help="Target FPS for the output MP4 video.")
 @click.option('-n', '--num_workers', type=int, default=None, help="Number of concurrent processes.")
 @click.argument('session_dir', nargs=-1)
-def main(color_topic, fps, num_workers, session_dir):
+def main(fps, num_workers, session_dir):
     if num_workers is None:
         num_workers = multiprocessing.cpu_count()
         print(f"Using {num_workers} workers.")
 
     print("--- Starting RealSense BAG to MP4 Video Conversion ---")
+    
+    topics = ['/device_0/sensor_0/Depth_0/image/data', 
+              '/device_0/sensor_0/Infrared_1/image/data', 
+              '/device_0/sensor_0/Infrared_2/image/data',
+              '/device_0/sensor_1/Color_0/image/data']
+    
+    vid_path_names = ['depth_video.mp4', 'ir_l_video.mp4', 'ir_r_video.mp4', 'color_video.mp4']
+    encodings = ['mono16', '8UC1', '8UC1', 'bgr8']
 
     for session in session_dir:
         session_path = pathlib.Path(os.path.expanduser(session)).absolute()
@@ -111,7 +124,7 @@ def main(color_topic, fps, num_workers, session_dir):
 
         print(f'Found {len(input_bag_paths)} BAG files for MP4 conversion.')
 
-        total_tasks = len(input_bag_paths)
+        total_tasks = len(input_bag_paths) * len(topics)
 
         # ProcessPoolExecutor를 사용하여 병렬 처리 (CV 작업은 CPU 바인딩이므로 프로세스 풀 사용)
         with tqdm(total=total_tasks) as pbar: 
@@ -121,23 +134,26 @@ def main(color_topic, fps, num_workers, session_dir):
                 for bag_path in tqdm(input_bag_paths, desc="Scheduling MP4 conversion"):
                     bag_dir = bag_path.parent 
                     mp4_path = bag_dir.joinpath('raw_video.mp4')
-
-                    # Skip if MP4 already exists
-                    if mp4_path.is_file():
-                        print(f"[INFO] {bag_dir.name}/raw_video.mp4 already exists. Skipping.")
-                        pbar.update(1)
-                        continue
-
-                    # MP4 추출 작업 예약
-                    mp4_future = executor.submit(
-                        process_bag_to_mp4, bag_path, mp4_path, color_topic, fps)
-                    futures.add(mp4_future)
                     
-                    # 완료된 작업 처리 및 tqdm 업데이트
-                    if len(futures) >= num_workers:
-                        completed, futures = concurrent.futures.wait(futures, 
-                            return_when=concurrent.futures.FIRST_COMPLETED)
-                        pbar.update(len(completed))
+                    for topic_name, vid_name, enc in zip(topics, vid_path_names, encodings):
+                        mp4_path = bag_dir.joinpath(vid_name)
+                        
+                        # Skip if MP4 already exists
+                        if mp4_path.is_file():
+                            print(f"[INFO] {bag_dir.name}/raw_video.mp4 already exists. Skipping.")
+                            pbar.update(1)
+                            continue
+
+                        # MP4 추출 작업 예약
+                        mp4_future = executor.submit(
+                            process_bag_to_mp4, bag_path, mp4_path, topic_name, fps, enc)
+                        futures.add(mp4_future)
+                    
+                        # 완료된 작업 처리 및 tqdm 업데이트
+                        if len(futures) >= num_workers:
+                            completed, futures = concurrent.futures.wait(futures, 
+                                return_when=concurrent.futures.FIRST_COMPLETED)
+                            pbar.update(len(completed))
 
                 # 남아있는 모든 작업 완료 대기
                 completed, futures = concurrent.futures.wait(futures)

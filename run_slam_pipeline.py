@@ -41,8 +41,8 @@ def main(session_dir, calibration_dir):
         result = subprocess.run(cmd)
         assert result.returncode == 0, result
 
-        print("############## 01_0_extract_videos #############")
-        script_path = script_dir.joinpath("01_0_extract_videos.py")
+        print("############## 01_extract_videos #############")
+        script_path = script_dir.joinpath("01_extract_videos.py")
         assert script_path.is_file()
         cmd = ["python", str(script_path), str(session)]
         result = subprocess.run(cmd)
