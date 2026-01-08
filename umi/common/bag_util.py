@@ -3,7 +3,7 @@ from datetime import datetime
 import pandas as pd
 
 
-def bag_get_start_datetime(file_path):
+def bag_get_start_datetime(file_path: str) -> datetime:
     """
     Returns the file's modification time (mtime) as a proxy for the start date/time.
     """
@@ -17,7 +17,7 @@ def bag_get_start_datetime(file_path):
     md = pd.read_csv(meta)
     return datetime.fromtimestamp(float(md.at[8, 'value'])/1000.0)
     
-def bag_get_camera_serial(file_path):
+def bag_get_camera_serial(file_path: str) -> str:
     """
     Returns a camera serial number extracted from the BAG file.
     """

@@ -36,22 +36,10 @@ from umi.common.interpolation_util import (
     get_interp1d,
     PoseInterpolator
 )
-
-def bag_get_start_datetime(file_path):
-    """
-    Returns the file's modification time (mtime) as a proxy for the start date/time.
-    """
-    try:
-        mtime = pathlib.Path(file_path).stat().st_mtime
-        return datetime.datetime.fromtimestamp(mtime)
-    except Exception:
-        return datetime.datetime.now()
-
-def bag_get_camera_serial(file_path):
-    """
-    Returns a hardcoded serial number for classification purposes.
-    """
-    return "135122070988"
+from umi.common.bag_util import (
+    bag_get_camera_serial,
+    bag_get_start_datetime
+)
 
 
 # %%
@@ -116,6 +104,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
     # tcp to camera transform
     # all unit in meters
     # y axis in camera frame
+    # TODO: fix constants to realsense UMI setup
     cam_to_center_height = 0.086 # constant for UMI
     # optical center to mounting screw, positive is when optical center is in front of the mount
     cam_to_mount_offset = 0.01465 # constant for GoPro Hero 9,10,11
@@ -144,8 +133,9 @@ def main(input, output, tcp_offset, tx_slam_tag,
             # mp4_path = gripper_cal_path.parent.joinpath('raw_video.mp4')
             # meta = list(et.get_metadata(str(mp4_path)))[0]
             # cam_serial = meta['QuickTime:CameraSerialNumber']
-
-            cam_serial = bag_get_camera_serial(...)
+            
+            bag_path = gripper_cal_path.parent.joinpath("raw_bag.bag")
+            cam_serial = bag_get_camera_serial(str(bag_path.absolute()))
 
             gripper_range_data = json.load(gripper_cal_path.open('r'))
             gripper_id = gripper_range_data['gripper_id']
@@ -165,7 +155,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
     # output: video_meta_df
     
     # find videos
-    video_dirs = sorted([x.parent for x in demos_dir.glob('demo_*/raw_video.mp4')])
+    video_dirs = sorted([x.parent for x in demos_dir.glob('demo_*/raw_bag.bag')])
 
     # ignore camera
     ignore_cam_serials = set()
@@ -183,10 +173,10 @@ def main(input, output, tcp_offset, tx_slam_tag,
             # start_date = mp4_get_start_datetime(str(mp4_path))
             # start_timestamp = start_date.timestamp()
 
-            bag_path = video_dir.joinpath("raw_bag.bag")
-            start_date: datetime.datetime = bag_get_start_datetime(bag_path)
+            bag_path = video_dir.joinpath("raw_bag.bag").absolute()
+            start_date: datetime.datetime = bag_get_start_datetime(str(bag_path))
             start_timestamp = start_date.timestamp()
-            cam_serial = bag_get_camera_serial(...)
+            cam_serial = bag_get_camera_serial(str(bag_path))
 
             if cam_serial in ignore_cam_serials:
                 print(f"Ignored {video_dir.name}")

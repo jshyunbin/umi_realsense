@@ -38,8 +38,7 @@ from umi.common.cv_util_realsense import (
 def main(input_dir, map_path, docker_image, no_docker_pull, no_mask):
     bag_dir = pathlib.Path(os.path.expanduser(input_dir)).absolute()
 
-    # for fn in ['raw_video.mp4', 'imu_data.json']:
-    for fn in ['raw_video.mp4']:
+    for fn in ['raw_bag.bag', 'color_video.mp4', 'depth_video.mp4', 'ir_l_video.mp4', 'ir_r_video.mp4']:
         assert bag_dir.joinpath(fn).is_file()
 
     if map_path is None:
@@ -50,9 +49,9 @@ def main(input_dir, map_path, docker_image, no_docker_pull, no_mask):
 
     csv_path = bag_dir.joinpath('mapping_camera_trajectory.csv')
     bag_path = bag_dir.joinpath("raw_bag.bag")
-    video_path = bag_dir.joinpath('raw_video.mp4')
-    json_path = bag_dir.joinpath('imu_data.json')
-    mask_path = bag_dir.joinpath('slam_mask.png')
+    # video_path = bag_dir.joinpath('raw_video.mp4')
+    # json_path = bag_dir.joinpath('imu_data.json')
+    # mask_path = bag_dir.joinpath('slam_mask.png')
 
     if not no_mask:
         # left, right

@@ -153,8 +153,8 @@ def main(fps, num_workers, session_dir):
                         if len(futures) >= num_workers:
                             completed, futures = concurrent.futures.wait(futures,
                                 return_when=concurrent.futures.FIRST_COMPLETED)
-                            pbar.update(len(completed))
                             done.update(completed)
+                            pbar.update(len(completed))
                             
 
                 # 남아있는 모든 작업 완료 대기

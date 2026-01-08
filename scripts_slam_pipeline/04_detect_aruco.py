@@ -28,7 +28,7 @@ from tqdm import tqdm
 @click.option('-n', '--num_workers', type=int, default=None)
 def main(input_dir, camera_intrinsics, aruco_yaml, num_workers):
     input_dir = pathlib.Path(os.path.expanduser(input_dir))
-    input_video_dirs = [x.parent for x in input_dir.glob('*/raw_video.mp4')]
+    input_video_dirs = [x.parent for x in input_dir.glob('*/color_video.mp4')]
     print(f'Found {len(input_video_dirs)} video dirs')
     
     assert os.path.isfile(camera_intrinsics)
@@ -39,16 +39,18 @@ def main(input_dir, camera_intrinsics, aruco_yaml, num_workers):
 
     script_path = pathlib.Path(__file__).parent.parent.joinpath('scripts', 'detect_aruco.py')
 
-    with tqdm(total=len(input_video_dirs)) as pbar:
+    done = set()
+    with tqdm(total=len(input_video_dirs), desc="Detecting ArUco tags") as pbar:
         # one chunk per thread, therefore no synchronization needed
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = set()
-            for video_dir in tqdm(input_video_dirs):
+            for video_dir in input_video_dirs:
                 video_dir = video_dir.absolute()
-                video_path = video_dir.joinpath('raw_video.mp4')
+                video_path = video_dir.joinpath('color_video.mp4')
                 pkl_path = video_dir.joinpath('tag_detection.pkl')
                 if pkl_path.is_file():
                     print(f"tag_detection.pkl already exists, skipping {video_dir.name}")
+                    pbar.update()
                     continue
 
                 # run SLAM
@@ -66,6 +68,7 @@ def main(input_dir, camera_intrinsics, aruco_yaml, num_workers):
                     completed, futures = concurrent.futures.wait(futures, 
                         return_when=concurrent.futures.FIRST_COMPLETED)
                     pbar.update(len(completed))
+                    done.update(completed)
 
                 futures.add(executor.submit(
                     lambda x: subprocess.run(x, 
@@ -73,12 +76,18 @@ def main(input_dir, camera_intrinsics, aruco_yaml, num_workers):
                     cmd))
                 
                 # futures.add(executor.submit(lambda x: print(' '.join(x)), cmd))
+            while futures:
+                completed, futures = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)            
+                pbar.update(len(completed))
+                done.update(completed)
 
-            completed, futures = concurrent.futures.wait(futures)            
-            pbar.update(len(completed))
+
+    results = [x.result() for x in done if x.result() is True]
+    errors = [x.result() for x in done if x.result() is False]
 
     print("Done! Result:")
-    # print([x.result() for x in completed])
+    print(f"  Total successful MP4 conversions: {len(results)}")
+    print(f"  Total conversion failures: {len(errors)}")
 
 # %%
 if __name__ == "__main__":

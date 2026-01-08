@@ -46,25 +46,25 @@ def runner(cmd, cwd, stdout_path, stderr_path, timeout, **kwargs):
 @click.command()
 @click.option('-i', '--input_dir', required=True, help='Directory for demos folder')
 @click.option('-m', '--map_path', default=None, help='ORB_SLAM3 *.osa map atlas file')
-@click.option('-d', '--docker_image', default="chicheng/orb_slam3:latest")
+# @click.option('-d', '--docker_image', default="chicheng/orb_slam3:latest")
 @click.option('-n', '--num_workers', type=int, default=None)
 @click.option('-ml', '--max_lost_frames', type=int, default=60)
 @click.option('-tm', '--timeout_multiple', type=float, default=16, help='timeout_multiple * duration = timeout')
-@click.option('-np', '--no_docker_pull', is_flag=True, default=False, help="pull docker image from docker hub")
+# @click.option('-np', '--no_docker_pull', is_flag=True, default=False, help="pull docker image from docker hub")
 @click.option('-nm', '--no_mask', is_flag=True, default=False, help="Whether to mask out gripper and mirrors. Set if map is created with bare GoPro no on gripper.")
 def main(input_dir, 
     map_path, 
-    docker_image, 
+    # docker_image, 
     num_workers, 
     max_lost_frames, 
     timeout_multiple, 
-    no_docker_pull,
+    # no_docker_pull,
     no_mask,
 ):
     input_dir = pathlib.Path(os.path.expanduser(input_dir)).absolute()
-    input_bag_dirs = [x.parent for x in input_dir.glob('demo*/raw_video.mp4')]
-    input_bag_dirs += [x.parent for x in input_dir.glob('map*/raw_video.mp4')]
-    print(f'Found {len(input_bag_dirs)} video dirs')
+    input_bag_dirs = [x.parent for x in input_dir.glob('demo*/raw_bag.bag')]
+    input_bag_dirs += [x.parent for x in input_dir.glob('map*/raw_bag.bag')]
+    print(f'Found {len(input_bag_dirs)} bag dirs')
     
     if map_path is None:
         map_path = input_dir.joinpath('mapping', 'map_atlas.osa')
@@ -87,17 +87,19 @@ def main(input_dir,
     #     if p.returncode != 0:
     #         print("Docker pull failed!")
     #         exit(1)
+    
+    done = set()
 
-    with tqdm(total=len(input_bag_dirs)) as pbar:
+    with tqdm(total=len(input_bag_dirs), desc="Running ORB3_SLAM on bag files") as pbar:
         # one chunk per thread, therefore no synchronization needed
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = set()
-            for bag_dir in tqdm(input_bag_dirs):
+            for bag_dir in input_bag_dirs:
                 bag_dir = bag_dir.absolute()
-                print(f"[INFO] bag_dir={str(bag_dir)}")
-                # if bag_dir.joinpath('camera_trajectory.csv').is_file():
-                #     print(f"camera_trajectory.csv already exists, skipping {bag_dir.name}")
-                #     continue
+                # print(f"[INFO] bag_dir={str(bag_dir)}")
+                if bag_dir.joinpath('camera_trajectory.csv').is_file():
+                    print(f"camera_trajectory.csv already exists, skipping {bag_dir.name}")
+                    continue
                 
                 # softlink won't work in bind volume
                 # mount_target = pathlib.Path('/data')
@@ -106,11 +108,11 @@ def main(input_dir,
                 bag_path = bag_dir.joinpath("raw_bag.bag")
 
                 # NOTE
-                mask_path = mount_target.joinpath('slam_mask.png')
-                mask_write_path = bag_dir.joinpath('slam_mask.png')
+                # mask_path = mount_target.joinpath('slam_mask.png')
+                # mask_write_path = bag_dir.joinpath('slam_mask.png')
                 
                 # find video duration
-                with av.open(str(bag_dir.joinpath('raw_video.mp4').absolute())) as container:
+                with av.open(str(bag_dir.joinpath('color_video.mp4').absolute())) as container:
                     video = container.streams.video[0]
                     duration_sec = float(video.duration * video.time_base)
                 timeout = duration_sec * timeout_multiple
@@ -168,16 +170,19 @@ def main(input_dir,
                     completed, futures = concurrent.futures.wait(futures, 
                         return_when=concurrent.futures.FIRST_COMPLETED)
                     pbar.update(len(completed))
+                    done.update(completed)
 
                 futures.add(executor.submit(runner,
                     cmd, str(bag_dir), stdout_path, stderr_path, timeout))
                 # print(' '.join(cmd))
 
-            completed, futures = concurrent.futures.wait(futures)
-            pbar.update(len(completed))
+            while futures:
+                completed, futures = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                done.update(completed)
+                pbar.update(len(completed))
 
     print("Done! Result:")
-    print([x.result() for x in completed])
+    print([x.result() for x in done])
 
 # %%
 if __name__ == "__main__":
