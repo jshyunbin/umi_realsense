@@ -1,3 +1,6 @@
+"""
+python scripts_slam_pipeline/00_preprocess.py /data/UMI
+"""
 import sys
 import os
 import pathlib
@@ -10,22 +13,10 @@ ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(ROOT_DIR)
 os.chdir(ROOT_DIR)
 
-
-def bag_get_start_datetime(file_path):
-    """
-    Returns the file's modification time (mtime) as a proxy for the start date/time.
-    """
-    try:
-        mtime = pathlib.Path(file_path).stat().st_mtime
-        return datetime.datetime.fromtimestamp(mtime)
-    except Exception:
-        return datetime.datetime.now()
-
-def bag_get_camera_serial(file_path):
-    """
-    Returns a hardcoded serial number for classification purposes.
-    """
-    return "135122070988"
+from umi.common.bag_util import (
+    bag_get_start_datetime,
+    bag_get_camera_serial
+)
 
 
 # %%
@@ -42,8 +33,10 @@ def main(session_dir):
         # Create raw_bags if don't exist
         if not input_dir.is_dir():
             input_dir.mkdir()
-            print(f"{input_dir.name} subdir don't exist! Creating one and assuming files will be moved here externally.")
-            return
+            print(f"{input_dir.name} subdir don't exist! Creating one and  moving all bag videos inside.")
+            for bag_path in list(session.glob('**/*.BAG')) + list(session.glob('**/*.bag')):
+                out_path = input_dir.joinpath(bag_path.name)
+                shutil.move(bag_path, out_path)
 
         # Create output dir
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -97,10 +90,10 @@ def main(session_dir):
             print(f"Copied {bag_path.name} to {out_video_path.relative_to(session)}")
 
             # Create symlink back from original location (Logic is kept but commented out)
-            # dots = os.path.join(*['..'] * len(bag_path.parent.relative_to(session).parts))
-            # rel_path = str(out_video_path.relative_to(session))
-            # symlink_path = os.path.join(dots, rel_path)                
-            # bag_path.symlink_to(symlink_path)
+            dots = os.path.join(*['..'] * len(bag_path.parent.relative_to(session).parts))
+            rel_path = str(out_video_path.relative_to(session))
+            symlink_path = os.path.join(dots, rel_path)                
+            bag_path.symlink_to(symlink_path)
 
 # %%
 if __name__ == '__main__':
