@@ -99,6 +99,7 @@ def main(input_dir,
                 # print(f"[INFO] bag_dir={str(bag_dir)}")
                 if bag_dir.joinpath('camera_trajectory.csv').is_file():
                     print(f"camera_trajectory.csv already exists, skipping {bag_dir.name}")
+                    pbar.update()
                     continue
                 
                 # softlink won't work in bind volume

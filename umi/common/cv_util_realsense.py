@@ -336,7 +336,7 @@ def inpaint_tag(img, corners, tag_scale=1.4, n_samples=16):
     return img
 
 
-def get_image_transform(in_res, out_res, crop_ratio:float = 1.0, bgr_to_rgb: bool=False):
+def get_image_transform(in_res, out_res, crop_ratio:float = 1.0, bgr_to_rgb: bool=False, grayscale: bool=False):
     iw, ih = in_res
     ow, oh = out_res
     ch = round(ih * crop_ratio)
@@ -352,11 +352,18 @@ def get_image_transform(in_res, out_res, crop_ratio:float = 1.0, bgr_to_rgb: boo
         c_slice = slice(None, None, -1)
 
     def transform(img: np.ndarray):
-        assert img.shape == ((ih,iw,3))
-        # crop
-        img = img[h_slice, w_slice, c_slice]
-        # resize
-        img = cv2.resize(img, out_res, interpolation=interp_method)
+        if grayscale: 
+            assert img.shape == ((ih,iw))
+            # crop
+            img = img[h_slice, w_slice]
+            # resize
+            img = cv2.resize(img, out_res, interpolation=interp_method)
+        else:
+            assert img.shape == ((ih,iw,3))
+            # crop
+            img = img[h_slice, w_slice, c_slice]
+            # resize
+            img = cv2.resize(img, out_res, interpolation=interp_method)
         return img
     
     return transform

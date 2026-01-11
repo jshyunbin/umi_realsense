@@ -166,8 +166,9 @@ def main(input, output, tcp_offset, tx_slam_tag,
     fps = None
     rows = list()
     with ExifToolHelper() as et:
-        for video_dir in video_dirs:            
-            mp4_path = video_dir.joinpath('raw_video.mp4')
+        for video_dir in video_dirs:
+            # all video frame rate is checked at 01 script
+            mp4_path = video_dir.joinpath('color_video.mp4')
             # meta = list(et.get_metadata(str(mp4_path)))[0]
             # cam_serial = meta['QuickTime:CameraSerialNumber']
             # start_date = mp4_get_start_datetime(str(mp4_path))
@@ -586,7 +587,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
         demo_timestamps = np.arange(n_frames) * float(dt) + start_timestamp
 
         # load pose and gripper data for each video
-        # determin valid frames for each video
+        # determine valid frames for each video
         all_cam_poses = list()
         all_gripper_widths = list()
         all_is_valid = list()
@@ -612,15 +613,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
                 print(f"Skipping {video_dir.name}, no camera_trajectory.csv.")
                 dropped_camera_count[row['camera_serial']] += 1
                 continue            
-            
 
-            csv_df = pd.read_csv(csv_path)
-            csv_path = video_dir.joinpath('camera_trajectory.csv')
-            
-            if not csv_path.is_file():
-                 print(f"Skipping {video_dir.name}, no camera_trajectory.csv.")
-                 dropped_camera_count[row['camera_serial']] += 1
-                 continue   
             csv_df = pd.read_csv(csv_path)
             
             pkl_path = video_dir.joinpath('tag_detection.pkl')
@@ -707,11 +700,11 @@ def main(input, output, tcp_offset, tx_slam_tag,
             is_step_valid = is_tracked.copy()
 
             # get gripper data
-            pkl_path = video_dir.joinpath('tag_detection.pkl')
-            if not pkl_path.is_file():
-                print(f"Skipping {video_dir.name}, no tag_detection.pkl.")
-                dropped_camera_count[row['camera_serial']] += 1
-                continue
+            # pkl_path = video_dir.joinpath('tag_detection.pkl')
+            # if not pkl_path.is_file():
+            #     print(f"Skipping {video_dir.name}, no tag_detection.pkl.")
+            #     dropped_camera_count[row['camera_serial']] += 1
+            #     continue
 
             # TODO: 
             if len(df) != len(video_timestamps):
@@ -831,7 +824,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
                 video_dir = row['video_dir']
                 vid_start_frame = cam_start_frame_idxs[cam_idx]
                 cameras.append({
-                    "video_path": str(video_dir.joinpath('raw_video.mp4').relative_to(video_dir.parent)),
+                    "video_path": str(video_dir.relative_to(video_dir.parent)),
                     "video_start_end": (start+vid_start_frame, end+vid_start_frame)
                 })
             

@@ -24,6 +24,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(ROOT_DIR)
 os.chdir(ROOT_DIR)
 
+from umi.common.bag_util import bag_get_fps
+
 # --- Helper Function: BAG to MP4 Conversion ---
 
 def process_bag_to_mp4(bag_path, mp4_path, color_topic_name, fps=30, enc="bgr8"):
@@ -134,6 +136,13 @@ def main(fps, num_workers, session_dir):
                 for bag_path in input_bag_paths:
                     bag_dir = bag_path.parent 
                     mp4_path = bag_dir.joinpath('raw_video.mp4')
+                    
+                    bag_fps = bag_get_fps(str(bag_path))
+                    bag_fps = [round(f) for f in bag_fps]
+                    if bag_fps != [fps]*4:
+                        print(f"[WARNING] BAG file {bag_path.name} has non-matching FPS {bag_fps}, expected {fps}. Skipping.")
+                        pbar.update(len(topics))
+                        continue
                     
                     for topic_name, vid_name, enc in zip(topics, vid_path_names, encodings):
                         mp4_path = bag_dir.joinpath(vid_name)
