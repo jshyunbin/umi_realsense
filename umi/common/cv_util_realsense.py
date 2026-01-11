@@ -245,19 +245,31 @@ def draw_rgb_predefined_mask(img, color=(0,0,0),*,mirror=True, gripper=True, fin
 def draw_im_l_infrared_mask(img, color=(0,0,0),*,mirror=True, gripper=True, finger=True, use_aa=False):
     all_coords = list()
 
-    pts = (
-        (80, 480),
-        (80, 350),
-        (164, 280),
-        (248, 240),
-        (340, 240),
-        (420, 280),
-        (470, 346),
-        (470, 480),
+    gripper_pts = (
+        (88, 480),
+        (80, 405),
+        (93, 322),
+        (116, 318),
+        (448, 312),
+        (467, 350),
+        (448, 480),
+    )
+    
+    finger_pts = (
+        (116, 318),
+        (177, 266),
+        (243, 236),
+        (345, 237),
+        (416, 275),
+        (448, 312),
     )
 
-    coords = np.stack([pixel_coords_to_canonical(pts, IR_IMG_SHAPE)])
-    all_coords.extend(coords)
+    gripper_coords = np.stack([pixel_coords_to_canonical(gripper_pts, IR_IMG_SHAPE)])
+    finger_coords = np.stack([pixel_coords_to_canonical(finger_pts, IR_IMG_SHAPE)])
+    if gripper:
+        all_coords.extend(gripper_coords)
+    if finger:
+        all_coords.extend(finger_coords)
 
     for coords in all_coords:
         pts = canonical_to_pixel_coords(coords, img.shape[:2])
@@ -269,20 +281,31 @@ def draw_im_l_infrared_mask(img, color=(0,0,0),*,mirror=True, gripper=True, fing
 def draw_im_r_infrared_mask(img, color=(0,0,0),*,mirror=True, gripper=True, finger=True, use_aa=False):
     all_coords = list()
 
-    pts = (
+    gripper_pts = (
+        (0, 336),
+        (23, 315),
+        (356, 314),
+        (356, 396),
+        (314, 480),
         (0, 480),
-        (0, 330),
-        (90, 275),
-        (190, 240),
-        (280, 240),
-        (335, 275),
-        (360, 350),
-        (360, 480)
+    )
+    
+    finger_pts = (
+        (23, 315),
+        (178, 238),
+        (286, 236),
+        (340, 274),
+        (356, 314),
     )
 
-    coords = np.stack([pixel_coords_to_canonical(pts, IR_IMG_SHAPE)])
-    all_coords.extend(coords)
-
+    gripper_coords = np.stack([pixel_coords_to_canonical(gripper_pts, IR_IMG_SHAPE)])
+    finger_coords = np.stack([pixel_coords_to_canonical(finger_pts, IR_IMG_SHAPE)])
+    if gripper:
+        all_coords.extend(gripper_coords)
+    if finger:
+        all_coords.extend(finger_coords)
+        
+    
     for coords in all_coords:
         pts = canonical_to_pixel_coords(coords, img.shape[:2])
         pts = np.round(pts).astype(np.int32)
