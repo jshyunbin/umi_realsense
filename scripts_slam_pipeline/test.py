@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 import av
 import pickle
+import zarr
 
 
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -22,46 +23,57 @@ from umi.common.cv_util_realsense import (
     inpaint_tag,
     get_image_transform,
 )
+from diffusion_policy.common.replay_buffer import ReplayBuffer
 
 if __name__ == "__main__":
     bag_path = "/data/UMI/demos/mapping/raw_bag.bag"
     vid_path = "/data/UMI/demos/mapping/color_video.mp4"
+    dataset_path = "/data/UMI/dataset.zarr.zip"
     
-    tag_detection_pkl_path = "/data/UMI/demos/mapping/tag_detection.pkl"
-    with open(tag_detection_pkl_path, 'rb') as f:
-        tag_detection_results = pickle.load(f)
-    
-    
-    with av.open(str(vid_path)) as container:
-        
-        in_stream = container.streams.video[0]
-        
-        resize_tf = get_image_transform(
-            in_res=(1920, 1080),
-            out_res=(224, 224),
-            # grayscale=True
+    with zarr.ZipStore(dataset_path, mode='r') as zip_store:
+        replay_buffer = ReplayBuffer.copy_from_store(
+            src_store=zip_store, 
+            store=zarr.MemoryStore()
         )
+    
+    print(replay_buffer.root.tree())
+    
+    
+    # tag_detection_pkl_path = "/data/UMI/demos/mapping/tag_detection.pkl"
+    # with open(tag_detection_pkl_path, 'rb') as f:
+    #     tag_detection_results = pickle.load(f)
+    
+    
+    # with av.open(str(vid_path)) as container:
+        
+    #     in_stream = container.streams.video[0]
+        
+    #     resize_tf = get_image_transform(
+    #         in_res=(1920, 1080),
+    #         out_res=(224, 224),
+    #         # grayscale=True
+    #     )
 
-        for frame_idx, frame in enumerate(container.decode(in_stream)):
-            if frame_idx == 0:
-                print(f"Frame {frame_idx}: {frame.width}x{frame.height}, format={frame.format.name}")
+    #     for frame_idx, frame in enumerate(container.decode(in_stream)):
+    #         if frame_idx == 0:
+    #             print(f"Frame {frame_idx}: {frame.width}x{frame.height}, format={frame.format.name}")
                 
-                img = frame.to_ndarray(format='rgb24')
+    #             img = frame.to_ndarray(format='rgb24')
                 
-                # inpaint tags
-                # this_det = tag_detection_results[frame_idx]
-                # all_corners = [x['corners'] for x in this_det['tag_dict'].values()]
-                # for corners in all_corners:
-                #     img = inpaint_tag(img, corners)
+    #             # inpaint tags
+    #             # this_det = tag_detection_results[frame_idx]
+    #             # all_corners = [x['corners'] for x in this_det['tag_dict'].values()]
+    #             # for corners in all_corners:
+    #             #     img = inpaint_tag(img, corners)
                 
-                # img = draw_im_l_infrared_mask(img, color=0, 
-                #             mirror=False, gripper=True, finger=True)
+    #             # img = draw_im_l_infrared_mask(img, color=0, 
+    #             #             mirror=False, gripper=True, finger=True)
                 
-                print(f"img shape: {img.shape}, dtype={img.dtype}")
-                img = resize_tf(img)
-                print(f"img shape: {img.shape}, dtype={img.dtype}")
-                while(1):
-                    cv2.imshow('frame', img)
-                    k= cv2.waitKey(1) & 0xFF
-                    if k == 27:
-                        break
+    #             print(f"img shape: {img.shape}, dtype={img.dtype}")
+    #             img = resize_tf(img)
+    #             print(f"img shape: {img.shape}, dtype={img.dtype}")
+    #             while(1):
+    #                 cv2.imshow('frame', img)
+    #                 k= cv2.waitKey(1) & 0xFF
+    #                 if k == 27:
+    #                     break
