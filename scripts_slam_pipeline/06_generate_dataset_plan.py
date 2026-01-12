@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/06_generate_dataset_plan.py -i data_workspace/cup_in_the_wild/20240105_zhenjia_packard_2nd_conference_room
+python scripts_slam_pipeline/06_generate_dataset_plan.py -i /data/UMI --nominal_z 0.2819
 """
 
 # %%
@@ -16,6 +16,7 @@ import click
 import pickle
 import numpy as np
 import json
+import datetime
 import math
 import collections
 import scipy.ndimage as sn
@@ -27,13 +28,17 @@ import av
 from exiftool import ExifToolHelper
 from umi.common.timecode_util import mp4_get_start_datetime
 from umi.common.pose_util import pose_to_mat, mat_to_pose
-from umi.common.cv_util import (
+from umi.common.cv_util_realsense import (
     get_gripper_width
 )
 from umi.common.interpolation_util import (
     get_gripper_calibration_interpolator, 
     get_interp1d,
     PoseInterpolator
+)
+from umi.common.bag_util import (
+    bag_get_camera_serial,
+    bag_get_start_datetime
 )
 
 
@@ -82,9 +87,9 @@ def get_x_projection(tx_tag_this, tx_tag_other):
 @click.command()
 @click.option('-i', '--input', required=True, help='Project directory')
 @click.option('-o', '--output', default=None)
-@click.option('-to', '--tcp_offset', type=float, default=0.205, help="Distance from gripper tip to mounting screw")
+@click.option('-to', '--tcp_offset', type=float, default=0.330, help="Distance from gripper tip to mounting screw")
 @click.option('-ts', '--tx_slam_tag', default=None, help="tx_slam_tag.json")
-@click.option('-nz', '--nominal_z', type=float, default=0.072, help="nominal Z value for gripper finger tag")
+@click.option('-nz', '--nominal_z', type=float, default=0.1667, help="nominal Z value for gripper finger tag")
 @click.option('-ml', '--min_episode_length', type=int, default=24)
 @click.option('--ignore_cameras', type=str, default=None, help="comma separated string of camera serials to ignore")
 def main(input, output, tcp_offset, tx_slam_tag,
@@ -99,12 +104,15 @@ def main(input, output, tcp_offset, tx_slam_tag,
     # tcp to camera transform
     # all unit in meters
     # y axis in camera frame
-    cam_to_center_height = 0.086 # constant for UMI
+    # TODO: fix constants to realsense UMI setup
+    cam_to_center_height = 0.115 # constant for UMI
+    
     # optical center to mounting screw, positive is when optical center is in front of the mount
     cam_to_mount_offset = 0.01465 # constant for GoPro Hero 9,10,11
     cam_to_tip_offset = cam_to_mount_offset + tcp_offset
 
-    pose_cam_tcp = np.array([0, cam_to_center_height, cam_to_tip_offset, 0,0,0])
+    # 25 deg downward tilt
+    pose_cam_tcp = np.array([0, cam_to_center_height, cam_to_tip_offset, -0.436332,0,0])
     tx_cam_tcp = pose_to_mat(pose_cam_tcp)
         
     # SLAM map origin to table tag transform
@@ -124,9 +132,12 @@ def main(input, output, tcp_offset, tx_slam_tag,
 
     with ExifToolHelper() as et:
         for gripper_cal_path in demos_dir.glob("gripper*/gripper_range.json"):
-            mp4_path = gripper_cal_path.parent.joinpath('raw_video.mp4')
-            meta = list(et.get_metadata(str(mp4_path)))[0]
-            cam_serial = meta['QuickTime:CameraSerialNumber']
+            # mp4_path = gripper_cal_path.parent.joinpath('raw_video.mp4')
+            # meta = list(et.get_metadata(str(mp4_path)))[0]
+            # cam_serial = meta['QuickTime:CameraSerialNumber']
+            
+            bag_path = gripper_cal_path.parent.joinpath("raw_bag.bag")
+            cam_serial = bag_get_camera_serial(str(bag_path.absolute()))
 
             gripper_range_data = json.load(gripper_cal_path.open('r'))
             gripper_id = gripper_range_data['gripper_id']
@@ -146,7 +157,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
     # output: video_meta_df
     
     # find videos
-    video_dirs = sorted([x.parent for x in demos_dir.glob('demo_*/raw_video.mp4')])
+    video_dirs = sorted([x.parent for x in demos_dir.glob('demo_*/raw_bag.bag')])
 
     # ignore camera
     ignore_cam_serials = set()
@@ -157,12 +168,18 @@ def main(input, output, tcp_offset, tx_slam_tag,
     fps = None
     rows = list()
     with ExifToolHelper() as et:
-        for video_dir in video_dirs:            
-            mp4_path = video_dir.joinpath('raw_video.mp4')
-            meta = list(et.get_metadata(str(mp4_path)))[0]
-            cam_serial = meta['QuickTime:CameraSerialNumber']
-            start_date = mp4_get_start_datetime(str(mp4_path))
+        for video_dir in video_dirs:
+            # all video frame rate is checked at 01 script
+            mp4_path = video_dir.joinpath('color_video.mp4')
+            # meta = list(et.get_metadata(str(mp4_path)))[0]
+            # cam_serial = meta['QuickTime:CameraSerialNumber']
+            # start_date = mp4_get_start_datetime(str(mp4_path))
+            # start_timestamp = start_date.timestamp()
+
+            bag_path = video_dir.joinpath("raw_bag.bag").absolute()
+            start_date: datetime.datetime = bag_get_start_datetime(str(bag_path))
             start_timestamp = start_date.timestamp()
+            cam_serial = bag_get_camera_serial(str(bag_path))
 
             if cam_serial in ignore_cam_serials:
                 print(f"Ignored {video_dir.name}")
@@ -250,7 +267,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
         else:
             on_videos.remove(event['vid_idx'])
             on_cameras.remove(event['camera_serial'])
-        assert len(on_videos) == len(on_cameras)
+        assert len(on_videos) == len(on_cameras), f"{len(on_videos)} {len(on_cameras)}"
         
         if len(on_cameras) == n_cameras:
             # start demo episode where all cameras are recording
@@ -325,12 +342,14 @@ def main(input, output, tcp_offset, tx_slam_tag,
             gripper_probs = sorted(gripper_prob_map.items(), key=lambda x:x[-1])
             gripper_id = gripper_probs[-1][0]
             gripper_prob = gripper_probs[-1][1]
+            
+            print(f"[INFO] {gripper_prob=}")
             if gripper_prob >= finger_tag_det_th:
                 gripper_id_by_tag = gripper_id
 
         cam_serial_gripper_ids_map[row['camera_serial']].append(gripper_id_by_tag)
         vid_idx_gripper_hardware_id_map[vid_idx] = gripper_id_by_tag
-    
+
     # add column to video_meta_df for gripper hardware id
     series = pd.Series(
         data=list(vid_idx_gripper_hardware_id_map.values()), 
@@ -409,7 +428,9 @@ def main(input, output, tcp_offset, tx_slam_tag,
 
             csv_df = pd.read_csv(csv_path)
             
-            if csv_df['is_lost'].sum() > 10:
+            # TODO: temporary disable this route
+            print(f"[INFO] lost: {csv_df['is_lost'].sum()} not lost: {(~csv_df['is_lost']).sum()}")
+            if csv_df['is_lost'].sum() > 15:
                 # drop episode if too many lost frames
                 # unreliable tracking
                 break
@@ -423,10 +444,10 @@ def main(input, output, tcp_offset, tx_slam_tag,
                 # build pose in tag frame (z-up)
                 tx_base_slam=tx_tag_slam)
             pose_interps.append(pose_interp)
-        
+
         if len(pose_interps) != n_gripper_cams:
             # invalid episode
-            print(f"Excluded demo {demo_idx} from left/right disambiguation.")
+            print(f"Excluded demo {demo_idx} from left/right disambiguation. {pose_interps=} {n_gripper_cams=}")
             continue
         
         # calculate x-projection for each other
@@ -568,7 +589,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
         demo_timestamps = np.arange(n_frames) * float(dt) + start_timestamp
 
         # load pose and gripper data for each video
-        # determin valid frames for each video
+        # determine valid frames for each video
         all_cam_poses = list()
         all_gripper_widths = list()
         all_is_valid = list()
@@ -594,20 +615,72 @@ def main(input, output, tcp_offset, tx_slam_tag,
                 print(f"Skipping {video_dir.name}, no camera_trajectory.csv.")
                 dropped_camera_count[row['camera_serial']] += 1
                 continue            
-            
+
             csv_df = pd.read_csv(csv_path)
-            # select aligned frames
-            df = csv_df.iloc[start_frame_idx: start_frame_idx+n_frames]
-            is_tracked = (~df['is_lost']).to_numpy()
+            
+            pkl_path = video_dir.joinpath('tag_detection.pkl')
+            print(pkl_path)
+            if not pkl_path.is_file():
+                print(f"Skipping {video_dir.name}, no tag_detection.pkl.")
+                dropped_camera_count[row['camera_serial']] += 1
+                continue
+            tag_data_all = pickle.load(open(pkl_path, 'rb'))
+
+            if not csv_df.empty and csv_df['timestamp'].max() > 1e9:
+                valid_timestamps = csv_df.loc[csv_df['timestamp'] > 1e9, 'timestamp']
+                if not valid_timestamps.empty:
+                    start_time = valid_timestamps.iloc[0] # 예: 1.763965e+09 (Row 1)
+                    print(f"[INFO] RealSense Epoch detected. Normalizing based on Row {valid_timestamps.index[0]}: {start_time:.3f}")
+                    csv_df['timestamp'] = np.maximum(csv_df['timestamp'] - start_time, 0)
+                else:
+                    print("[WARN] Max timestamp is large, but could not find valid start time.")
+            else:
+                print(f"[INFO] GoPro")
+
+            slam_times = csv_df['timestamp'].to_numpy()
+            aruco_times = np.array([x['time'] for x in tag_data_all])
+
+            epsilon = 50e-3
+            matched_slam_indices = []
+            matched_video_indices = []
+            
+            slam_idx = 0
+            n_slam = len(slam_times)
+            
+            for vid_idx, vid_t in enumerate(aruco_times):
+                while slam_idx < n_slam - 1 and slam_times[slam_idx] < (vid_t - epsilon):
+                    slam_idx += 1
+                
+                if slam_idx < n_slam - 1:
+                    curr_diff = abs(slam_times[slam_idx] - vid_t)
+                    next_diff = abs(slam_times[slam_idx+1] - vid_t)
+                    if next_diff < curr_diff:
+                        slam_idx += 1
+                
+                if abs(slam_times[slam_idx] - vid_t) <= epsilon:
+                    matched_slam_indices.append(slam_idx)
+                    matched_video_indices.append(vid_idx)
+
+            if len(matched_slam_indices) < 10:
+                print(f"Skipping {video_dir.name}: Too few matched frames ({len(matched_slam_indices)}). Check Sync.")
+                continue
+
+            df = csv_df.iloc[matched_slam_indices].copy()
+            tag_detection_results = [tag_data_all[i] for i in matched_video_indices]
+            video_timestamps = aruco_times[matched_video_indices]
 
             # basic filtering to remove bad tracking
+            is_tracked = (~df['is_lost']).to_numpy()
             n_frames_lost = (~is_tracked).sum()
+            n_frames_valid = is_tracked.sum()
+
+            print(f"[INFO] {n_frames_lost=} {n_frames_valid=}")
+            # TODO:
             if n_frames_lost > 10:
                 print(f"Skipping {video_dir.name}, {n_frames_lost} frames are lost.")
                 dropped_camera_count[row['camera_serial']] += 1
                 continue
 
-            n_frames_valid = is_tracked.sum()
             if n_frames_valid < 60:
                 print(f"Skipping {video_dir.name}, only {n_frames_valid} frames are valid.")
                 dropped_camera_count[row['camera_serial']] += 1
@@ -627,23 +700,17 @@ def main(input, output, tcp_offset, tx_slam_tag,
 
             # TODO: handle optinal robot cal based filtering
             is_step_valid = is_tracked.copy()
-            
 
             # get gripper data
-            pkl_path = video_dir.joinpath('tag_detection.pkl')
-            if not pkl_path.is_file():
-                print(f"Skipping {video_dir.name}, no tag_detection.pkl.")
-                dropped_camera_count[row['camera_serial']] += 1
-                continue
-                        
-            tag_detection_results = pickle.load(open(pkl_path, 'rb'))
-            # select aligned frames
-            tag_detection_results = tag_detection_results[start_frame_idx: start_frame_idx+n_frames]
+            # pkl_path = video_dir.joinpath('tag_detection.pkl')
+            # if not pkl_path.is_file():
+            #     print(f"Skipping {video_dir.name}, no tag_detection.pkl.")
+            #     dropped_camera_count[row['camera_serial']] += 1
+            #     continue
 
-            # one item per frame
-            video_timestamps = np.array([x['time'] for x in tag_detection_results])
-
+            # TODO: 
             if len(df) != len(video_timestamps):
+                print(f"[INFO] {len(df)=} {len(video_timestamps)=}")
                 print(f"Skipping {video_dir.name}, video csv length mismatch.")
                 continue
 
@@ -678,9 +745,12 @@ def main(input, output, tcp_offset, tx_slam_tag,
             gripper_interp = get_interp1d(gripper_timestamps, gripper_widths)
             
             gripper_det_ratio = (len(gripper_widths) / len(tag_detection_results))
+
             if gripper_det_ratio < 0.9:
-                print(f"Warining: {video_dir.name} only {gripper_det_ratio} of gripper tags detected.")
-            
+                print(f"Warning: {video_dir.name} only {gripper_det_ratio} of gripper tags detected.")
+            else:
+                print(f"Info: {video_dir.name} {gripper_det_ratio} of gripper tags detected.")
+
             this_gripper_widths = gripper_interp(video_timestamps)
             
             # transform to tcp frame
@@ -688,9 +758,10 @@ def main(input, output, tcp_offset, tx_slam_tag,
             pose_tag_tcp = mat_to_pose(tx_tag_tcp)
             
             # output value
-            assert len(pose_tag_tcp) == n_frames
-            assert len(this_gripper_widths) == n_frames
-            assert len(is_step_valid) == n_frames
+            # TODO: 
+            # assert len(pose_tag_tcp) == n_frames
+            # assert len(this_gripper_widths) == n_frames
+            # assert len(is_step_valid) == n_frames
             all_cam_poses.append(pose_tag_tcp)
             all_gripper_widths.append(this_gripper_widths)
             all_is_valid.append(is_step_valid)
@@ -722,6 +793,9 @@ def main(input, output, tcp_offset, tx_slam_tag,
             end = s.stop
             if not is_valid_segment:
                 continue
+
+            # TODO:
+            print(f"[INFO]: {start=} {end=} {min_episode_length=}")
             if (end - start) < min_episode_length:
                 is_step_valid[start:end] = False
         
@@ -752,7 +826,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
                 video_dir = row['video_dir']
                 vid_start_frame = cam_start_frame_idxs[cam_idx]
                 cameras.append({
-                    "video_path": str(video_dir.joinpath('raw_video.mp4').relative_to(video_dir.parent)),
+                    "video_path": str(video_dir.relative_to(video_dir.parent)),
                     "video_start_end": (start+vid_start_frame, end+vid_start_frame)
                 })
             

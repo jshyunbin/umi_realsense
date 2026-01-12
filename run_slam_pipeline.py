@@ -7,6 +7,7 @@ import sys
 import os
 
 ROOT_DIR = os.path.dirname(__file__)
+print(ROOT_DIR)
 sys.path.append(ROOT_DIR)
 os.chdir(ROOT_DIR)
 
@@ -15,14 +16,17 @@ import pathlib
 import click
 import subprocess
 
+
 # %%
 @click.command()
-@click.argument('session_dir', nargs=-1)
-@click.option('-c', '--calibration_dir', type=str, default=None)
+@click.argument("session_dir", nargs=-1)
+@click.option("-c", "--calibration_dir", type=str, default=None)
 def main(session_dir, calibration_dir):
-    script_dir = pathlib.Path(__file__).parent.joinpath('scripts_slam_pipeline')
+    script_dir = pathlib.Path(__file__).parent.joinpath("scripts_slam_pipeline")
     if calibration_dir is None:
-        calibration_dir = pathlib.Path(__file__).parent.joinpath('example', 'calibration')
+        calibration_dir = pathlib.Path(__file__).parent.joinpath(
+            "example", "calibration"
+        )
     else:
         calibration_dir = pathlib.Path(calibration_dir)
     assert calibration_dir.is_dir()
@@ -30,42 +34,40 @@ def main(session_dir, calibration_dir):
     for session in session_dir:
         session = pathlib.Path(os.path.expanduser(session)).absolute()
 
-        print("############## 00_process_videos #############")
-        script_path = script_dir.joinpath("00_process_videos.py")
+        print("############## 00_preprocess #############")
+        script_path = script_dir.joinpath("00_preprocess.py")
         assert script_path.is_file()
-        cmd = [
-            'python', str(script_path),
-            str(session)
-        ]
+        cmd = ["python", str(script_path), str(session)]
         result = subprocess.run(cmd)
-        assert result.returncode == 0
+        assert result.returncode == 0, result
 
-        print("############# 01_extract_gopro_imu ###########")
-        script_path = script_dir.joinpath("01_extract_gopro_imu.py")
+        print("############## 01_extract_videos #############")
+        script_path = script_dir.joinpath("01_extract_videos.py")
         assert script_path.is_file()
-        cmd = [
-            'python', str(script_path),
-            str(session)
-        ]
+        cmd = ["python", str(script_path), str(session)]
         result = subprocess.run(cmd)
-        assert result.returncode == 0
+        assert result.returncode == 0, result
 
         print("############# 02_create_map ###########")
         script_path = script_dir.joinpath("02_create_map.py")
         assert script_path.is_file()
-        demo_dir = session.joinpath('demos')
-        mapping_dir = demo_dir.joinpath('mapping')
+        demo_dir = session.joinpath("demos")
+        mapping_dir = demo_dir.joinpath("mapping")
         assert mapping_dir.is_dir()
-        map_path = mapping_dir.joinpath('map_atlas.osa')
+        map_path = mapping_dir.joinpath("map_atlas.osa")
         if not map_path.is_file():
             cmd = [
-                'python', str(script_path),
-                '--input_dir', str(mapping_dir),
-                '--map_path', str(map_path)
+                "python",
+                str(script_path),
+                "--input_dir",
+                str(mapping_dir),
+                "--map_path",
+                str(map_path),
+                "--no_docker_pull",
             ]
             result = subprocess.run(cmd)
-            assert result.returncode == 0
-            assert map_path.is_file()
+            assert result.returncode == 0, result
+            assert map_path.is_file(), result
 
         print("############# 03_batch_slam ###########")
         script_path = script_dir.joinpath("03_batch_slam.py")
@@ -73,7 +75,8 @@ def main(session_dir, calibration_dir):
         cmd = [
             'python', str(script_path),
             '--input_dir', str(demo_dir),
-            '--map_path', str(map_path)
+            '--map_path', str(map_path),
+            '--no_docker_pull',
         ]
         result = subprocess.run(cmd)
         assert result.returncode == 0
@@ -81,7 +84,7 @@ def main(session_dir, calibration_dir):
         print("############# 04_detect_aruco ###########")
         script_path = script_dir.joinpath("04_detect_aruco.py")
         assert script_path.is_file()
-        camera_intrinsics = calibration_dir.joinpath('gopro_intrinsics_2_7k.json')
+        camera_intrinsics = calibration_dir.joinpath('realsense_intrinsics.json')
         aruco_config = calibration_dir.joinpath('aruco_config.yaml')
         assert camera_intrinsics.is_file()
         assert aruco_config.is_file()
@@ -109,11 +112,13 @@ def main(session_dir, calibration_dir):
         script_path = script_dir.joinpath("06_generate_dataset_plan.py")
         assert script_path.is_file()
         cmd = [
-            'python', str(script_path),
-            '--input', str(session)
+            "python", str(script_path), 
+            "--input", str(session),
+            "--nominal_z", str(0.2819),
         ]
         result = subprocess.run(cmd)
         assert result.returncode == 0
+
 
 ## %%
 if __name__ == "__main__":

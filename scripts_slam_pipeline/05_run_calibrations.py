@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/05_run_calibrations.py data_workspace/cup_in_the_wild/20240105_zhenjia_packard_2nd_conference_room
+python scripts_slam_pipeline/05_run_calibrations.py /data/UMI
 """
 # %%
 import sys
@@ -30,6 +30,7 @@ def main(session_dir):
         script_path = script_dir.joinpath('calibrate_slam_tag.py')
         assert script_path.is_file()
         tag_path = mapping_dir.joinpath('tag_detection.pkl')
+        print("test", tag_path)
         assert tag_path.is_file()
         csv_path = mapping_dir.joinpath('camera_trajectory.csv')
         if not csv_path.is_file():
@@ -57,7 +58,9 @@ def main(session_dir):
             cmd = [
                 'python', str(script_path),
                 '--input', str(tag_path),
-                '--output', str(gripper_range_path)
+                '--output', str(gripper_range_path),
+                '--nominal_z', str(0.287),
+                '--tag_det_threshold', str(0.7),
             ]
             subprocess.run(cmd)
 

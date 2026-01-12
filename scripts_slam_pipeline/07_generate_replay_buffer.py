@@ -1,3 +1,7 @@
+"""
+python scripts_slam_pipeline/07_generate_replay_buffer.py -o /data/UMI/dataset.zarr.zip /data/UMI/
+"""
+
 # %%
 import sys
 import os
@@ -19,13 +23,14 @@ import multiprocessing
 import concurrent.futures
 from tqdm import tqdm
 from collections import defaultdict
-from umi.common.cv_util import (
-    parse_fisheye_intrinsics,
-    FisheyeRectConverter,
+from umi.common.cv_util_realsense import (
+    parse_realsense_intrinsics,
+    # FisheyeRectConverter,
     get_image_transform, 
-    draw_predefined_mask,
+    draw_rgb_predefined_mask,
+    draw_im_l_infrared_mask,
+    draw_im_r_infrared_mask,
     inpaint_tag,
-    get_mirror_crop_slices
 )
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.codecs.imagecodecs_numcodecs import register_codecs, JpegXl
@@ -37,13 +42,14 @@ register_codecs()
 @click.argument('input', nargs=-1)
 @click.option('-o', '--output', required=True, help='Zarr path')
 @click.option('-or', '--out_res', type=str, default='224,224')
-@click.option('-of', '--out_fov', type=float, default=None)
+# @click.option('-of', '--out_fov', type=float, default=None)
 @click.option('-cl', '--compression_level', type=int, default=99)
 @click.option('-nm', '--no_mirror', is_flag=True, default=False, help="Disable mirror observation by masking them out")
 @click.option('-ms', '--mirror_swap', is_flag=True, default=False)
 @click.option('-n', '--num_workers', type=int, default=None)
-def main(input, output, out_res, out_fov, compression_level, 
-         no_mirror, mirror_swap, num_workers):
+@click.option('-u', '--using_sensors', type=list[str], default=['ir_l', 'ir_r', 'color'], help='List of sensors to include in the replay buffer. Options: depth, ir_l, ir_r, color')
+def main(input, output, out_res, compression_level, 
+         no_mirror, mirror_swap, num_workers, using_sensors):
     if os.path.isfile(output):
         if click.confirm(f'Output file {output} exists! Overwrite?', abort=True):
             pass
@@ -54,18 +60,19 @@ def main(input, output, out_res, out_fov, compression_level,
         num_workers = multiprocessing.cpu_count()
     cv2.setNumThreads(1)
             
-    fisheye_converter = None
-    if out_fov is not None:
-        intr_path = pathlib.Path(os.path.expanduser(ipath)).absolute().joinpath(
-            'calibration',
-            'gopro_intrinsics_2_7k.json'
-        )
-        opencv_intr_dict = parse_fisheye_intrinsics(json.load(intr_path.open('r')))
-        fisheye_converter = FisheyeRectConverter(
-            **opencv_intr_dict,
-            out_size=out_res,
-            out_fov=out_fov
-        )
+    # fisheye_converter = None
+    # if out_fov is not None:
+    #     print("[WARNING]: not implemented yet.")
+        # intr_path = pathlib.Path(os.path.expanduser(ipath)).absolute().joinpath(
+        #     'calibration',
+        #     'gopro_intrinsics_2_7k.json'
+        # )
+        # opencv_intr_dict = parse_realsense_intrinsics(json.load(intr_path.open('r')))
+        # fisheye_converter = FisheyeRectConverter(
+        #     **opencv_intr_dict,
+        #     out_size=out_res,
+        #     out_fov=out_fov
+        # )
         
     out_replay_buffer = ReplayBuffer.create_empty_zarr(
         storage=zarr.MemoryStore())
@@ -84,7 +91,6 @@ def main(input, output, out_res, out_fov, compression_level,
         if not plan_path.is_file():
             print(f"Skipping {ipath.name}: no dataset_plan.pkl")
             continue
-        
         plan = pickle.load(plan_path.open('rb'))
         
         videos_dict = defaultdict(list)
@@ -128,20 +134,31 @@ def main(input, output, out_res, out_fov, compression_level,
             for cam_id, camera in enumerate(cameras):
                 video_path_rel = camera['video_path']
                 video_path = demos_path.joinpath(video_path_rel).absolute()
-                assert video_path.is_file()
                 
-                video_start, video_end = camera['video_start_end']
-                if n_frames is None:
-                    n_frames = video_end - video_start
-                else:
-                    assert n_frames == (video_end - video_start)
+                for sensor in using_sensors:
+                    video_file = video_path.joinpath(f'{sensor}_video.mp4')
+                    assert video_file.is_file()
                 
-                videos_dict[str(video_path)].append({
-                    'camera_idx': cam_id,
-                    'frame_start': video_start,
-                    'frame_end': video_end,
-                    'buffer_start': buffer_start
-                })
+                    video_start, video_end = camera['video_start_end']
+                    if n_frames is None:
+                        n_frames = video_end - video_start
+                    else:
+                        assert n_frames == (video_end - video_start)
+                    
+                    # get image size
+                    with av.open(str(video_file)) as container:
+                        in_stream = container.streams.video[0]
+                        ih, iw = in_stream.height, in_stream.width
+                    
+                    videos_dict[str(video_file)].append({
+                        'camera_idx': cam_id,
+                        'frame_start': video_start,
+                        'frame_end': video_end,
+                        'buffer_start': buffer_start,
+                        'img_size': (iw, ih),
+                        'sensor': sensor
+                    })
+                    
             buffer_start += n_frames
         
         vid_args.extend(videos_dict.items())
@@ -149,30 +166,22 @@ def main(input, output, out_res, out_fov, compression_level,
     
     print(f"{len(all_videos)} videos used in total!")
     
-    # get image size
-    with av.open(vid_args[0][0]) as container:
-        in_stream = container.streams.video[0]
-        ih, iw = in_stream.height, in_stream.width
-    
     # dump images
     img_compressor = JpegXl(level=compression_level, numthreads=1)
     for cam_id in range(n_cameras):
-        name = f'camera{cam_id}_rgb'
-        _ = out_replay_buffer.data.require_dataset(
-            name=name,
-            shape=(out_replay_buffer['robot0_eef_pos'].shape[0],) + out_res + (3,),
-            chunks=(1,) + out_res + (3,),
-            compressor=img_compressor,
-            dtype=np.uint8
-        )
+        for sensor in using_sensors:
+            name = f'camera{cam_id}_{sensor}'
+            _ = out_replay_buffer.data.require_dataset(
+                name=name,
+                shape=(out_replay_buffer['robot0_eef_pos'].shape[0],) + (out_res + (3,) if sensor == 'color' else out_res),
+                chunks=(1,) + (out_res + (3,) if sensor == 'color' else out_res),
+                compressor=img_compressor,
+                dtype=np.uint8
+            )
 
     def video_to_zarr(replay_buffer, mp4_path, tasks):
         pkl_path = os.path.join(os.path.dirname(mp4_path), 'tag_detection.pkl')
         tag_detection_results = pickle.load(open(pkl_path, 'rb'))
-        resize_tf = get_image_transform(
-            in_res=(iw, ih),
-            out_res=out_res
-        )
         tasks = sorted(tasks, key=lambda x: x['frame_start'])
         camera_idx = None
         for task in tasks:
@@ -180,18 +189,24 @@ def main(input, output, out_res, out_fov, compression_level,
                 camera_idx = task['camera_idx']
             else:
                 assert camera_idx == task['camera_idx']
-        name = f'camera{camera_idx}_rgb'
+        sensor = tasks[0]['sensor']
+        name = f'camera{camera_idx}_{sensor}'
         img_array = replay_buffer.data[name]
+        resize_tf = get_image_transform(
+            in_res=tasks[0]['img_size'],
+            out_res=out_res,
+            grayscale= (sensor != 'color')
+        )
         
         curr_task_idx = 0
         
-        is_mirror = None
-        if mirror_swap:
-            ow, oh = out_res
-            mirror_mask = np.ones((oh,ow,3),dtype=np.uint8)
-            mirror_mask = draw_predefined_mask(
-                mirror_mask, color=(0,0,0), mirror=True, gripper=False, finger=False)
-            is_mirror = (mirror_mask[...,0] == 0)
+        # is_mirror = None
+        # if mirror_swap:
+        #     ow, oh = out_res
+        #     mirror_mask = np.ones((oh,ow,3),dtype=np.uint8)
+        #     mirror_mask = draw_rgb_predefined_mask(
+        #         mirror_mask, color=(0,0,0), mirror=True, gripper=False, finger=False)
+        #     is_mirror = (mirror_mask[...,0] == 0)
         
         with av.open(mp4_path) as container:
             in_stream = container.streams.video[0]
@@ -211,26 +226,34 @@ def main(input, output, out_res, out_fov, compression_level,
                         buffer_idx = tasks[curr_task_idx]['buffer_start']
                     
                     # do current task
-                    img = frame.to_ndarray(format='rgb24')
+                    img = frame.to_ndarray(format='rgb24' if sensor == 'color' else 'gray8')
 
-                    # inpaint tags
-                    this_det = tag_detection_results[frame_idx]
-                    all_corners = [x['corners'] for x in this_det['tag_dict'].values()]
-                    for corners in all_corners:
-                        img = inpaint_tag(img, corners)
+                    # inpaint tags (only works for rgb currently)
+                    if sensor == 'color':
+                        this_det = tag_detection_results[frame_idx]
+                        all_corners = [x['corners'] for x in this_det['tag_dict'].values()]
+                        for corners in all_corners:
+                            img = inpaint_tag(img, corners)
                         
                     # mask out gripper
-                    img = draw_predefined_mask(img, color=(0,0,0), 
-                        mirror=no_mirror, gripper=True, finger=False)
+                    if sensor == 'color':
+                        img = draw_rgb_predefined_mask(img, color=(0,0,0), 
+                            mirror=no_mirror, gripper=True, finger=False)
+                    elif sensor == 'ir_l':
+                        img = draw_im_l_infrared_mask(img, color=0, 
+                            mirror=no_mirror, gripper=True, finger=False)
+                    elif sensor == 'ir_r':
+                        img = draw_im_r_infrared_mask(img, color=0, 
+                            mirror=no_mirror, gripper=True, finger=False)
                     # resize
-                    if fisheye_converter is None:
-                        img = resize_tf(img)
-                    else:
-                        img = fisheye_converter.forward(img)
+                    # if fisheye_converter is None:
+                    img = resize_tf(img)
+                    # else:
+                    #     img = fisheye_converter.forward(img)
                         
                     # handle mirror swap
-                    if mirror_swap:
-                        img[is_mirror] = img[:,::-1,:][is_mirror]
+                    # if mirror_swap:
+                    #     img[is_mirror] = img[:,::-1,:][is_mirror]
                         
                     # compress image
                     img_array[buffer_idx] = img
