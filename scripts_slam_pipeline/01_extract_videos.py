@@ -37,7 +37,6 @@ def main(fps, num_workers, session_dir):
     print("--- Starting RealSense BAG to MP4 Video Conversion ---")
     
     vid_names = ['depth', 'ir_l', 'ir_r', 'color']
-    imu_types = ['accel', 'gyro']
 
     for session in session_dir:
         session_path = pathlib.Path(os.path.expanduser(session)).absolute()
@@ -52,7 +51,7 @@ def main(fps, num_workers, session_dir):
 
         print(f'Found {len(input_bag_paths)} BAG files for MP4 conversion.')
 
-        total_tasks = len(input_bag_paths) * (len(vid_names) + len(imu_types))
+        total_tasks = len(input_bag_paths) * (len(vid_names) + 1)
         
         done = set()
 
@@ -92,26 +91,25 @@ def main(fps, num_workers, session_dir):
                             done.update(completed)
                             pbar.update(len(completed))
                     
-                    for imu_type in imu_types:
-                        csv_path = bag_dir.joinpath(f'imu_{imu_type}_data.csv')
-                        
-                        # Skip if CSV already exists
-                        if csv_path.is_file():
-                            print(f"[INFO] {bag_dir.name}/imu_{imu_type}_data.csv already exists. Skipping.")
-                            pbar.update()
-                            continue
+                    csv_path = bag_dir.joinpath(f'imu_data.csv')
+                    
+                    # Skip if CSV already exists
+                    if csv_path.is_file():
+                        print(f"[INFO] {bag_dir.name}/imu_data.csv already exists. Skipping.")
+                        pbar.update()
+                        continue
 
-                        # IMU CSV 추출 작업 예약
-                        imu_future = executor.submit(
-                            process_bag_to_csv, bag_path, csv_path, imu_type)
-                        futures.add(imu_future)
+                    # IMU CSV 추출 작업 예약
+                    imu_future = executor.submit(
+                        process_bag_to_csv, bag_path, csv_path)
+                    futures.add(imu_future)
 
-                        # 완료된 작업 처리 및 tqdm 업데이트
-                        if len(futures) >= num_workers:
-                            completed, futures = concurrent.futures.wait(futures,
-                                return_when=concurrent.futures.FIRST_COMPLETED)
-                            done.update(completed)
-                            pbar.update(len(completed))
+                    # 완료된 작업 처리 및 tqdm 업데이트
+                    if len(futures) >= num_workers:
+                        completed, futures = concurrent.futures.wait(futures,
+                            return_when=concurrent.futures.FIRST_COMPLETED)
+                        done.update(completed)
+                        pbar.update(len(completed))
                             
 
                 # 남아있는 모든 작업 완료 대기

@@ -34,7 +34,7 @@ BAG_VID_TOPIC = {
 }
 
 
-def process_bag_to_csv(bag_path, csv_path, imu_type):
+def process_bag_to_csv(bag_path, csv_path):
     """
     Extract IMU data from BAG file and save as CSV.
     Args:
@@ -43,12 +43,11 @@ def process_bag_to_csv(bag_path, csv_path, imu_type):
         imu_topic_name (str): ROS topic name for the IMU data stream.
     """
     b = bagreader(str(bag_path))
-    data_csv = b.message_by_topic(BAG_IMU_TOPIC[imu_type])
-    df = pd.read_csv(data_csv)
-    if imu_type == 'gyro':
-        df = df[['Time', 'angular_velocity.x', 'angular_velocity.y', 'angular_velocity.z']]
-    else:  # 'accel'
-        df = df[['Time', 'linear_acceleration.x', 'linear_acceleration.y', 'linear_acceleration.z']]
+    data_csv = [b.message_by_topic(BAG_IMU_TOPIC[imu_type]) for imu_type in ['accel', 'gyro']]
+    df = [pd.read_csv(dc) for dc in data_csv]
+    df[1] = df[1][['Time', 'angular_velocity.x', 'angular_velocity.y', 'angular_velocity.z']]
+    df[0] = df[0][['Time', 'linear_acceleration.x', 'linear_acceleration.y', 'linear_acceleration.z']]
+    df = pd.merge_asof(df[0].sort_values('Time'), df[1].sort_values('Time'), on='Time')
     
     df.to_csv(csv_path, index=False)
     
