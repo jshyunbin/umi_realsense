@@ -15,6 +15,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(ROOT_DIR)
 os.chdir(ROOT_DIR)
 
+from diffusion_policy.codecs.imagecodecs_numcodecs import register_codecs
 from umi.common.bag_util import bag_get_fps
 from umi.common.cv_util_realsense import (
     draw_im_l_infrared_mask,
@@ -24,6 +25,8 @@ from umi.common.cv_util_realsense import (
     get_image_transform,
 )
 from diffusion_policy.common.replay_buffer import ReplayBuffer
+
+register_codecs()
 
 if __name__ == "__main__":
     bag_path = "/data/UMI/demos/mapping/raw_bag.bag"

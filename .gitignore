@@ -8,6 +8,7 @@ outputs
 wandb
 **/.DS_Store
 *.lprof
+memo.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
