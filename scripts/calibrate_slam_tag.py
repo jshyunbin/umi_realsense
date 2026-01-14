@@ -41,22 +41,7 @@ def main(tag_detection, csv_trajectory, output, tag_id, keyframe_only):
     if keyframe_only:
         is_valid &= df['is_keyframe']
 
-    # NOTE: GoPro and Realsene have different timestamp methods!!
-    # convert to mat
-
-    if not df.empty and df['timestamp'].max() > 1e9:
-        valid_timestamps = df.loc[df['timestamp'] > 1e9, 'timestamp']
-        if not valid_timestamps.empty:
-            start_time = valid_timestamps.iloc[0] # 예: 1.763965e+09 (Row 1)
-            print(f"[INFO] RealSense Epoch detected. Normalizing based on Row {valid_timestamps.index[0]}: {start_time:.3f}")
-            df['timestamp'] = np.maximum(df['timestamp'] - start_time, 0)
-        else:
-            print("[WARN] Max timestamp is large, but could not find valid start time.")
-
-        cam_pose_timestamps = df['timestamp'].loc[is_valid].to_numpy()
-    else:
-        print(f"[INFO] GoPro")
-        cam_pose_timestamps = df['timestamp'].loc[is_valid].to_numpy()
+    cam_pose_timestamps = df['timestamp'].loc[is_valid].to_numpy()
 
     # [NOTE] debug
     print("=" * 50)
