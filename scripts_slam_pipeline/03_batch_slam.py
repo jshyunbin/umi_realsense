@@ -46,19 +46,15 @@ def runner(cmd, cwd, stdout_path, stderr_path, timeout, **kwargs):
 @click.command()
 @click.option('-i', '--input_dir', required=True, help='Directory for demos folder')
 @click.option('-m', '--map_path', default=None, help='ORB_SLAM3 *.osa map atlas file')
-# @click.option('-d', '--docker_image', default="chicheng/orb_slam3:latest")
 @click.option('-n', '--num_workers', type=int, default=None)
 @click.option('-ml', '--max_lost_frames', type=int, default=60)
 @click.option('-tm', '--timeout_multiple', type=float, default=16, help='timeout_multiple * duration = timeout')
-# @click.option('-np', '--no_docker_pull', is_flag=True, default=False, help="pull docker image from docker hub")
 @click.option('-nm', '--no_mask', is_flag=True, default=False, help="Whether to mask out gripper and mirrors. Set if map is created with bare GoPro no on gripper.")
 def main(input_dir, 
     map_path, 
-    # docker_image, 
     num_workers, 
     max_lost_frames, 
     timeout_multiple, 
-    # no_docker_pull,
     no_mask,
 ):
     input_dir = pathlib.Path(os.path.expanduser(input_dir)).absolute()
@@ -75,18 +71,6 @@ def main(input_dir,
     if num_workers is None:
         num_workers = multiprocessing.cpu_count() // 2
 
-    # pull docker
-    # if not no_docker_pull:
-    #     print(f"Pulling docker image {docker_image}")
-    #     cmd = [
-    #         'docker',
-    #         'pull',
-    #         docker_image
-    #     ]
-    #     p = subprocess.run(cmd)
-    #     if p.returncode != 0:
-    #         print("Docker pull failed!")
-    #         exit(1)
     
     done = set()
 
@@ -96,31 +80,22 @@ def main(input_dir,
             futures = set()
             for bag_dir in input_bag_dirs:
                 bag_dir = bag_dir.absolute()
-                # print(f"[INFO] bag_dir={str(bag_dir)}")
                 if bag_dir.joinpath('camera_trajectory.csv').is_file():
                     print(f"camera_trajectory.csv already exists, skipping {bag_dir.name}")
                     pbar.update()
                     continue
                 
-                # softlink won't work in bind volume
-                # mount_target = pathlib.Path('/data')
-                mount_target = bag_dir
-                csv_path = mount_target.joinpath('camera_trajectory.csv')
-                bag_path = bag_dir.joinpath("raw_bag.bag")
+                csv_path = bag_dir.joinpath('camera_trajectory.csv')
+                video_l_path = bag_dir.joinpath('ir_l_video.mp4')
+                video_r_path = bag_dir.joinpath('ir_r_video.mp4')
+                imu_csv_path = bag_dir.joinpath('imu_data.csv')
 
-                # NOTE
-                # mask_path = mount_target.joinpath('slam_mask.png')
-                # mask_write_path = bag_dir.joinpath('slam_mask.png')
                 
                 # find video duration
                 with av.open(str(bag_dir.joinpath('color_video.mp4').absolute())) as container:
                     video = container.streams.video[0]
                     duration_sec = float(video.duration * video.time_base)
                 timeout = duration_sec * timeout_multiple
-                
-                # slam_mask = np.zeros(RGB_IMG_SHAPE, dtype=np.uint8)
-                # slam_mask = draw_rgb_predefined_mask(slam_mask, color=255)
-                # cv2.imwrite(str(mask_write_path.absolute()), slam_mask)
 
                 if not no_mask:
                     # left, right
@@ -135,12 +110,9 @@ def main(input_dir,
                     slam_mask = draw_im_r_infrared_mask(slam_mask, color=255)
                     cv2.imwrite(str(ir_r_slam_mask_path.absolute()), slam_mask)
 
-                # mount location for docker implementation
-                # map_mount_source = map_path
-                # map_mount_target = pathlib.Path('/map').joinpath(map_mount_source.name)
 
                 ORB_SLAM3_ROOT = pathlib.Path("/data/ORB_SLAM3").expanduser()
-                binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/stereo_inertial_realsense_D435i")
+                binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/realsense_slam")
                 setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/RealSense_D435i.yaml")
                 voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
 
@@ -150,15 +122,16 @@ def main(input_dir,
                     str(binary_path),
                     "--setting", str(setting_path), 
                     "--vocabulary", str(voca_path),
-                    "--bag_path", str(bag_path),
+                    "--input_video_l", str(video_l_path),
+                    "--input_video_r", str(video_r_path),
+                    "--input_imu_csv", str(imu_csv_path),
                     '--output_trajectory_csv', str(csv_path),
                     '--load_map', str(map_path),
-                    # '--max_lost_frames', str(max_lost_frames)
+                    '--max_lost_frames', str(max_lost_frames)
                 ]
 
                 if not no_mask:
                     cmd.extend([
-                        # '--mask_img', str(mask_path),
                         "--ir_l_mask", str(ir_l_slam_mask_path),
                         "--ir_r_mask", str(ir_r_slam_mask_path),
                     ])

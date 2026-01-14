@@ -48,7 +48,6 @@ def process_bag_to_csv(bag_path, csv_path):
     df[1] = df[1][['Time', 'angular_velocity.x', 'angular_velocity.y', 'angular_velocity.z']]
     df[0] = df[0][['Time', 'linear_acceleration.x', 'linear_acceleration.y', 'linear_acceleration.z']]
     df = pd.merge_asof(df[0].sort_values('Time'), df[1].sort_values('Time'), on='Time')
-    
     df.to_csv(csv_path, index=False)
     
     

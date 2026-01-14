@@ -63,7 +63,6 @@ def main(session_dir, calibration_dir):
                 str(mapping_dir),
                 "--map_path",
                 str(map_path),
-                "--no_docker_pull",
             ]
             result = subprocess.run(cmd)
             assert result.returncode == 0, result
@@ -76,7 +75,6 @@ def main(session_dir, calibration_dir):
             'python', str(script_path),
             '--input_dir', str(demo_dir),
             '--map_path', str(map_path),
-            '--no_docker_pull',
         ]
         result = subprocess.run(cmd)
         assert result.returncode == 0
