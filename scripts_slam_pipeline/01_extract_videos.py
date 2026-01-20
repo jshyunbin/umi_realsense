@@ -18,7 +18,6 @@ os.chdir(ROOT_DIR)
 from umi.common.bag_util import (
     bag_get_fps,
     process_bag_to_mp4,
-    process_bag_to_csv,
     BAG_VID_TOPIC,
     BAG_VID_ENC
 )
@@ -51,7 +50,7 @@ def main(fps, num_workers, session_dir):
 
         print(f'Found {len(input_bag_paths)} BAG files for MP4 conversion.')
 
-        total_tasks = len(input_bag_paths) * (len(vid_names) + 1)
+        total_tasks = len(input_bag_paths) * len(vid_names)
         
         done = set()
 
@@ -88,23 +87,6 @@ def main(fps, num_workers, session_dir):
                                 return_when=concurrent.futures.FIRST_COMPLETED)
                             done.update(completed)
                             pbar.update(len(completed))
-                    
-                    csv_path = bag_dir.joinpath(f'imu_data.csv')
-                    
-                    if csv_path.is_file():
-                        print(f"[INFO] {bag_dir.name}/imu_data.csv already exists. Skipping.")
-                        pbar.update()
-                        continue
-
-                    imu_future = executor.submit(
-                        process_bag_to_csv, bag_path, csv_path)
-                    futures.add(imu_future)
-
-                    if len(futures) >= num_workers:
-                        completed, futures = concurrent.futures.wait(futures,
-                            return_when=concurrent.futures.FIRST_COMPLETED)
-                        done.update(completed)
-                        pbar.update(len(completed))
                             
 
                 while futures:
