@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/02_create_map.py -i /data/UMI/demos/mapping 
+python scripts_slam_pipeline/02_create_map.py -i /data/mapping 
 """
 
 # %%

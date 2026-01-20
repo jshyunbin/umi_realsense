@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/03_batch_slam.py -i /data/UMI/demos -m /data/UMI/demos/mapping/map_atlas.osa
+python scripts_slam_pipeline/03_batch_slam.py -i /data/test_collection/demos -m /data/test_collection/demos/mapping/map_atlas.osa
 """
 # %%
 import sys

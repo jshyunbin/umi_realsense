@@ -79,12 +79,10 @@ def main(fps, num_workers, session_dir):
                             pbar.update()
                             continue
 
-                        # MP4 추출 작업 예약
                         mp4_future = executor.submit(
                             process_bag_to_mp4, bag_path, mp4_path, BAG_VID_TOPIC[vid_name], fps, BAG_VID_ENC[vid_name])
                         futures.add(mp4_future)
                     
-                        # 완료된 작업 처리 및 tqdm 업데이트
                         if len(futures) >= num_workers:
                             completed, futures = concurrent.futures.wait(futures,
                                 return_when=concurrent.futures.FIRST_COMPLETED)
@@ -93,18 +91,15 @@ def main(fps, num_workers, session_dir):
                     
                     csv_path = bag_dir.joinpath(f'imu_data.csv')
                     
-                    # Skip if CSV already exists
                     if csv_path.is_file():
                         print(f"[INFO] {bag_dir.name}/imu_data.csv already exists. Skipping.")
                         pbar.update()
                         continue
 
-                    # IMU CSV 추출 작업 예약
                     imu_future = executor.submit(
                         process_bag_to_csv, bag_path, csv_path)
                     futures.add(imu_future)
 
-                    # 완료된 작업 처리 및 tqdm 업데이트
                     if len(futures) >= num_workers:
                         completed, futures = concurrent.futures.wait(futures,
                             return_when=concurrent.futures.FIRST_COMPLETED)
@@ -112,13 +107,11 @@ def main(fps, num_workers, session_dir):
                         pbar.update(len(completed))
                             
 
-                # 남아있는 모든 작업 완료 대기
                 while futures:
                     completed, futures = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
                     done.update(completed)
                     pbar.update(len(completed))
 
-        # 결과 요약
         results = [x.result() for x in done if x.result() is True]
         errors = [x.result() for x in done if x.result() is False]
         

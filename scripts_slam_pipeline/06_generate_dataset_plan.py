@@ -112,7 +112,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
     cam_to_tip_offset = cam_to_mount_offset + tcp_offset
 
     # 25 deg downward tilt
-    pose_cam_tcp = np.array([0, cam_to_center_height, cam_to_tip_offset, -0.436332,0,0])
+    pose_cam_tcp = np.array([1.0, cam_to_center_height, cam_to_tip_offset, -0.436332,0,0])
     tx_cam_tcp = pose_to_mat(pose_cam_tcp)
         
     # SLAM map origin to table tag transform

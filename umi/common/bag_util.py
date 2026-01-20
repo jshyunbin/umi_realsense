@@ -5,6 +5,7 @@ import rosbag
 from cv_bridge import CvBridge
 import cv2
 from sensor_msgs.msg import Image
+import numpy as np
 
 
 BAG_VID_NAME = [
@@ -42,12 +43,16 @@ def process_bag_to_csv(bag_path, csv_path):
         csv_path (pathlib.Path): Path to the target imu_data.csv file.
         imu_topic_name (str): ROS topic name for the IMU data stream.
     """
-    b = bagreader(str(bag_path))
+    b = bagreader(str(bag_path), verbose=False)
     data_csv = [b.message_by_topic(BAG_IMU_TOPIC[imu_type]) for imu_type in ['accel', 'gyro']]
     df = [pd.read_csv(dc) for dc in data_csv]
-    df[1] = df[1][['Time', 'angular_velocity.x', 'angular_velocity.y', 'angular_velocity.z']]
-    df[0] = df[0][['Time', 'linear_acceleration.x', 'linear_acceleration.y', 'linear_acceleration.z']]
-    df = pd.merge_asof(df[0].sort_values('Time'), df[1].sort_values('Time'), on='Time')
+    df[1] = df[1][['Time', 'angular_velocity.x', 'angular_velocity.y', 'angular_velocity.z']].sort_values('Time')
+    df[0] = df[0][['Time', 'linear_acceleration.x', 'linear_acceleration.y', 'linear_acceleration.z']].sort_values('Time')
+
+    df[0]['angular_velocity.x'] = np.interp(df[0]['Time'], df[1]['Time'], df[1]['angular_velocity.x'])
+    df[0]['angular_velocity.y'] = np.interp(df[0]['Time'], df[1]['Time'], df[1]['angular_velocity.y'])
+    df[0]['angular_velocity.z'] = np.interp(df[0]['Time'], df[1]['Time'], df[1]['angular_velocity.z'])
+    df = df[0]
     df.to_csv(csv_path, index=False)
     
     
@@ -119,7 +124,7 @@ def bag_get_start_datetime(file_path: str) -> datetime:
     Returns the file's modification time (mtime) as a proxy for the start date/time.
     """
     try:
-        reader = bagreader(file_path)
+        reader = bagreader(file_path, verbose=False)
     except Exception as e:
         print(f"Error reading bag file {file_path}: {e}")
         return datetime.now()
@@ -133,7 +138,7 @@ def bag_get_camera_serial(file_path: str) -> str:
     Returns a camera serial number extracted from the BAG file.
     """
     try:
-        reader = bagreader(file_path)
+        reader = bagreader(file_path, verbose=False)
     except Exception as e:
         print(f"Error reading bag file {file_path}: {e}")
         return None
@@ -149,7 +154,7 @@ def bag_get_fps(file_path: str) -> float:
     Estimates the FPS of the color video stream in the BAG file.
     """
     try:
-        reader = bagreader(file_path)
+        reader = bagreader(file_path, verbose=False)
     except Exception as e:
         print(f"Error reading bag file {file_path}: {e}")
         return 30.0  # default FPS

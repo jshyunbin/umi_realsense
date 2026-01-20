@@ -52,7 +52,8 @@ def main(session_dir):
         if not gripper_cal_dir.is_dir():
             gripper_cal_dir.mkdir()
             print("raw_bags/gripper_calibration don't exist! Creating one.")
-            return
+            shutil.move(input_dir.joinpath('gripper.bag'), gripper_cal_dir.joinpath('gripper.bag'))
+            print("Moved gripper.bag to gripper_calibration/gripper.bag")
 
         # Look for bag video in all subdirectories in input_dir
         input_bag_paths = list(input_dir.glob('**/*.BAG')) + list(input_dir.glob('**/*.bag'))
