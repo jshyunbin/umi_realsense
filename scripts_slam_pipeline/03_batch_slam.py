@@ -112,8 +112,8 @@ def main(input_dir,
 
 
                 ORB_SLAM3_ROOT = pathlib.Path("/data/ORB_SLAM3").expanduser()
-                binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/realsense_slam")
-                setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/RealSense_D435i.yaml")
+                binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo/stereo_realsense_slam")
+                setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo/RealSense_D435i.yaml")
                 voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
 
                 
@@ -124,7 +124,6 @@ def main(input_dir,
                     "--vocabulary", str(voca_path),
                     "--input_video_l", str(video_l_path),
                     "--input_video_r", str(video_r_path),
-                    "--input_imu_csv", str(imu_csv_path),
                     '--output_trajectory_csv', str(csv_path),
                     '--load_map', str(map_path),
                     '--max_lost_frames', str(max_lost_frames)
