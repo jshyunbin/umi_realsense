@@ -117,7 +117,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
         
     # SLAM map origin to table tag transform
     if tx_slam_tag is None:
-        path = demos_dir.joinpath('mapping', 'tx_slam_tag.json')
+        path = demos_dir.joinpath('mapping', 'extracted_data', 'tx_slam_tag.json')
         assert path.is_file()
         tx_slam_tag = str(path)
     tx_slam_tag = np.array(json.load(
@@ -130,9 +130,9 @@ def main(input, output, tcp_offset, tx_slam_tag,
     gripper_id_gripper_cal_map = dict()
     cam_serial_gripper_cal_map = dict()
 
-    for gripper_cal_path in demos_dir.glob("gripper*/gripper_range.json"):
+    for gripper_cal_path in demos_dir.glob("gripper*/extracted_data/gripper_range.json"):
         
-        bag_path = gripper_cal_path.parent.joinpath("raw_bag.bag")
+        bag_path = gripper_cal_path.parent.parent.joinpath("raw_bag.bag")
         cam_serial = bag_get_camera_serial(str(bag_path.absolute()))
 
         gripper_range_data = json.load(gripper_cal_path.open('r'))
@@ -165,7 +165,8 @@ def main(input, output, tcp_offset, tx_slam_tag,
     rows = list()
     for video_dir in video_dirs:
         # all video frame rate is checked at 01 script
-        mp4_path = video_dir.joinpath('color_video.mp4')
+        extract_dir = video_dir.joinpath('extracted_data')
+        mp4_path = extract_dir.joinpath('color_video.mp4')
 
         bag_path = video_dir.joinpath("raw_bag.bag").absolute()
         start_date: datetime.datetime = bag_get_start_datetime(str(bag_path))
@@ -180,8 +181,8 @@ def main(input, output, tcp_offset, tx_slam_tag,
         if not csv_path.is_file():
             print(f"Ignored {video_dir.name}, no camera_trajectory.csv")
             continue
-        
-        pkl_path = video_dir.joinpath('tag_detection.pkl')
+            
+        pkl_path = extract_dir.joinpath('tag_detection.pkl')
         if not pkl_path.is_file():
             print(f"Ignored {video_dir.name}, no tag_detection.pkl")
             continue
@@ -296,7 +297,8 @@ def main(input, output, tcp_offset, tx_slam_tag,
     cam_serial_gripper_ids_map = collections.defaultdict(list)
     for vid_idx, row in video_meta_df.iterrows():
         video_dir = row['video_dir']
-        pkl_path = video_dir.joinpath('tag_detection.pkl')
+        extract_dir = video_dir.joinpath('extracted_data')
+        pkl_path = extract_dir.joinpath('tag_detection.pkl')
         if not pkl_path.is_file():
             vid_idx_gripper_hardware_id_map[vid_idx] = -1
             continue
@@ -411,7 +413,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
             cam_serials.append(row['camera_serial'])
             gripper_vid_idxs.append(vid_idx)
             vid_dir = row['video_dir']
-                        
+            
             csv_path = vid_dir.joinpath('camera_trajectory.csv')
             if not csv_path.is_file():
                 # no tracking data
@@ -609,7 +611,7 @@ def main(input, output, tcp_offset, tx_slam_tag,
 
             csv_df = pd.read_csv(csv_path)
             
-            pkl_path = video_dir.joinpath('tag_detection.pkl')
+            pkl_path = video_dir.joinpath('extracted_data', 'tag_detection.pkl')
             print(pkl_path)
             if not pkl_path.is_file():
                 print(f"Skipping {video_dir.name}, no tag_detection.pkl.")

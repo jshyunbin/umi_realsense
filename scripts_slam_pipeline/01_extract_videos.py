@@ -61,6 +61,8 @@ def main(fps, num_workers, session_dir):
                 
                 for bag_path in input_bag_paths:
                     bag_dir = bag_path.parent 
+                    extract_dir = bag_dir.joinpath('extracted_data')
+                    extract_dir.mkdir(parents=True, exist_ok=True)
                     
                     bag_fps = bag_get_fps(str(bag_path))
                     bag_fps = [round(f) for f in bag_fps]
@@ -70,11 +72,11 @@ def main(fps, num_workers, session_dir):
                         continue
                     
                     for vid_name in BAG_VID_NAME:
-                        mp4_path = bag_dir.joinpath(f'{vid_name}_video.mp4')
+                        mp4_path = extract_dir.joinpath(f'{vid_name}_video.mp4')
                         
                         # Skip if MP4 already exists
                         if mp4_path.is_file():
-                            print(f"[INFO] {bag_dir.name}/{vid_name}_video.mp4 already exists. Skipping.")
+                            print(f"[INFO] {extract_dir.parent.name}/{extract_dir.name}/{vid_name}_video.mp4 already exists. Skipping.")
                             pbar.update()
                             continue
 
@@ -88,10 +90,10 @@ def main(fps, num_workers, session_dir):
                             done.update(completed)
                             pbar.update(len(completed))
                     
-                    csv_path = bag_dir.joinpath(f'imu_data.csv')
+                    csv_path = extract_dir.joinpath(f'imu_data.csv')
                     
                     if csv_path.is_file():
-                        print(f"[INFO] {bag_dir.name}/imu_data.csv already exists. Skipping.")
+                        print(f"[INFO] {extract_dir.parent.name}/{extract_dir.name}/imu_data.csv already exists. Skipping.")
                         pbar.update()
                         continue
 
@@ -123,10 +125,17 @@ def main(fps, num_workers, session_dir):
         with tqdm(total=len(input_bag_paths), desc="Matching Timestamps") as pbar:
             for bag_path in input_bag_paths:
                 bag_dir = bag_path.parent
-                df = pd.read_csv(bag_dir.joinpath('imu_data.csv'))
+                extract_dir = bag_dir.joinpath('extracted_data')
+                
+                if extract_dir.joinpath('timestamps.csv').is_file():
+                    print(f"[INFO] {extract_dir.parent.name}/{extract_dir.name}/timestamps.csv already exists. Skipping.")
+                    pbar.update()
+                    continue
+                
+                df = pd.read_csv(extract_dir.joinpath('imu_data.csv'))
                 
                 for vid_name in BAG_VID_NAME:
-                    ts_path = bag_dir.joinpath('timestamps', f'{vid_name}.txt')
+                    ts_path = extract_dir.joinpath('timestamps', f'{vid_name}.txt')
                     if not ts_path.is_file():
                         print(f"[WARNING] Timestamp file {ts_path} not found. Skipping.")
                         pbar.update()
@@ -140,11 +149,10 @@ def main(fps, num_workers, session_dir):
                         stamp_dict = {"Time": lines, f"{vid_name}_idx": list(range(len(lines)))}
                         
                         df = df.merge(pd.DataFrame.from_dict(stamp_dict), how='outer').sort_values('Time')
-                shutil.rmtree(bag_dir.joinpath('timestamps'))
-                os.remove(bag_dir.joinpath('imu_data.csv'))
+                shutil.rmtree(extract_dir.joinpath('timestamps'))
                 
                 df["Time"] = df["Time"] - df["Time"].iloc[0]
-                df.to_csv(bag_dir.joinpath('timestamps.csv'), index=False)
+                df.to_csv(extract_dir.joinpath('timestamps.csv'), index=False)
                 pbar.update()
 
 # %%

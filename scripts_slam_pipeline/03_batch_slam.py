@@ -85,19 +85,21 @@ def main(input_dir,
             futures = set()
             for bag_dir in input_bag_dirs:
                 bag_dir = bag_dir.absolute()
+                extract_dir = bag_dir.joinpath('extracted_data')
+                
                 if bag_dir.joinpath('camera_trajectory.csv').is_file():
                     print(f"camera_trajectory.csv already exists, skipping {bag_dir.name}")
                     pbar.update()
                     continue
                 
                 csv_path = bag_dir.joinpath('camera_trajectory.csv')
-                video_l_path = bag_dir.joinpath('ir_l_video.mp4')
-                video_r_path = bag_dir.joinpath('ir_r_video.mp4')
-                df_csv_path = bag_dir.joinpath('timestamps.csv')
+                video_l_path = extract_dir.joinpath('ir_l_video.mp4')
+                video_r_path = extract_dir.joinpath('ir_r_video.mp4')
+                df_csv_path = extract_dir.joinpath('timestamps.csv')
 
                 
                 # find video duration
-                with av.open(str(bag_dir.joinpath('color_video.mp4').absolute())) as container:
+                with av.open(str(extract_dir.joinpath('color_video.mp4').absolute())) as container:
                     video = container.streams.video[0]
                     duration_sec = float(video.duration * video.time_base)
                 timeout = duration_sec * timeout_multiple
@@ -158,7 +160,6 @@ def main(input_dir,
 
                 futures.add(executor.submit(runner,
                     cmd, str(bag_dir), stdout_path, stderr_path, timeout))
-                # print(' '.join(cmd))
 
             while futures:
                 completed, futures = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)

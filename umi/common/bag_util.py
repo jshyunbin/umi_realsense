@@ -126,6 +126,8 @@ def process_bag_to_mp4(bag_path, mp4_path, vid_name, fps=30):
 def bag_get_start_datetime(file_path: str) -> datetime:
     """
     Reads bag file and returns system time of the first message.
+    [Warning] This function does not get exact start time of the bag file
+              use it only for estimating up to seconds accuracy.
     """
     try:
         reader = bagreader(file_path, verbose=False)

@@ -18,7 +18,6 @@ from tqdm import tqdm
 import numpy as np
 import cv2
 from umi.common.cv_util_realsense import (
-    draw_rgb_predefined_mask,
     draw_im_l_infrared_mask,
     draw_im_r_infrared_mask,
     IR_IMG_SHAPE
@@ -35,9 +34,10 @@ def main(input_dir, map_path, stereo, no_mask):
         print("[WARN] Not using IMU data for map creation.")
     
     bag_dir = pathlib.Path(os.path.expanduser(input_dir)).absolute()
+    extract_dir = bag_dir.joinpath('extracted_data')
 
-    for fn in ['raw_bag.bag', 'color_video.mp4', 'depth_video.mp4', 'ir_l_video.mp4', 'ir_r_video.mp4']:
-        assert bag_dir.joinpath(fn).is_file()
+    for fn in ['color_video.mp4', 'depth_video.mp4', 'ir_l_video.mp4', 'ir_r_video.mp4']:
+        assert extract_dir.joinpath(fn).is_file()
 
     if map_path is None:
         map_path = bag_dir.joinpath('map_atlas.osa')
@@ -46,9 +46,9 @@ def main(input_dir, map_path, stereo, no_mask):
     map_path.parent.mkdir(parents=True, exist_ok=True)
 
     csv_path = bag_dir.joinpath('mapping_camera_trajectory.csv')
-    video_l_path = bag_dir.joinpath('ir_l_video.mp4')
-    video_r_path = bag_dir.joinpath('ir_r_video.mp4')
-    df_csv_path = bag_dir.joinpath('timestamps.csv')
+    video_l_path = extract_dir.joinpath('ir_l_video.mp4')
+    video_r_path = extract_dir.joinpath('ir_r_video.mp4')
+    df_csv_path = extract_dir.joinpath('timestamps.csv')
 
     if not no_mask:
         # left, right

@@ -28,8 +28,8 @@ from tqdm import tqdm
 @click.option('-n', '--num_workers', type=int, default=None)
 def main(input_dir, camera_intrinsics, aruco_yaml, num_workers):
     input_dir = pathlib.Path(os.path.expanduser(input_dir))
-    input_video_dirs = [x.parent for x in input_dir.glob('*/color_video.mp4')]
-    print(f'Found {len(input_video_dirs)} video dirs')
+    input_video_dirs = [x.parent for x in input_dir.glob('*/raw_bag.bag')]
+    print(f'Found {len(input_video_dirs)} bag dirs')
     
     assert os.path.isfile(camera_intrinsics)
     assert os.path.isfile(aruco_yaml)
@@ -45,11 +45,11 @@ def main(input_dir, camera_intrinsics, aruco_yaml, num_workers):
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = set()
             for video_dir in input_video_dirs:
-                video_dir = video_dir.absolute()
+                video_dir = video_dir.absolute().joinpath('extracted_data')
                 video_path = video_dir.joinpath('color_video.mp4')
                 pkl_path = video_dir.joinpath('tag_detection.pkl')
                 if pkl_path.is_file():
-                    print(f"tag_detection.pkl already exists, skipping {video_dir.name}")
+                    print(f"tag_detection.pkl already exists, skipping {video_dir.parent.name}")
                     pbar.update()
                     continue
 

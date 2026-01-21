@@ -136,7 +136,7 @@ def main(input, output, out_res, compression_level,
                 video_path = demos_path.joinpath(video_path_rel).absolute()
                 
                 for sensor in using_sensors:
-                    video_file = video_path.joinpath(f'{sensor}_video.mp4')
+                    video_file = video_path.joinpath('extracted_data', f'{sensor}_video.mp4')
                     assert video_file.is_file()
                 
                     video_start, video_end = camera['video_start_end']
