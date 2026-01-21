@@ -14,17 +14,13 @@ os.chdir(ROOT_DIR)
 import pathlib
 import click
 import subprocess
-import multiprocessing
-import concurrent.futures
 from tqdm import tqdm
 import numpy as np
 import cv2
-# from umi.common.cv_util import draw_predefined_mask
 from umi.common.cv_util_realsense import (
     draw_rgb_predefined_mask,
     draw_im_l_infrared_mask,
     draw_im_r_infrared_mask,
-    RGB_IMG_SHAPE,
     IR_IMG_SHAPE
 )
 
@@ -32,8 +28,12 @@ from umi.common.cv_util_realsense import (
 @click.command()
 @click.option('-i', '--input_dir', required=True, help='Directory for mapping video')
 @click.option('-m', '--map_path', default=None, help='ORB_SLAM3 *.osa map atlas file')
+@click.option('-s', '--stereo', is_flag=True, default=False, help='Use stereo SLAM instead of stereo-inertial SLAM')
 @click.option('-nm', '--no_mask', is_flag=True, default=False, help="Whether to mask out gripper and mirrors. Set if map is created with bare GoPro no on gripper.")
-def main(input_dir, map_path, no_mask):
+def main(input_dir, map_path, stereo, no_mask):
+    if stereo:
+        print("[WARN] Not using IMU data for map creation.")
+    
     bag_dir = pathlib.Path(os.path.expanduser(input_dir)).absolute()
 
     for fn in ['raw_bag.bag', 'color_video.mp4', 'depth_video.mp4', 'ir_l_video.mp4', 'ir_r_video.mp4']:
@@ -48,7 +48,7 @@ def main(input_dir, map_path, no_mask):
     csv_path = bag_dir.joinpath('mapping_camera_trajectory.csv')
     video_l_path = bag_dir.joinpath('ir_l_video.mp4')
     video_r_path = bag_dir.joinpath('ir_r_video.mp4')
-    imu_csv_path = bag_dir.joinpath('timestamps.csv')
+    df_csv_path = bag_dir.joinpath('timestamps.csv')
 
     if not no_mask:
         # left, right
@@ -67,9 +67,14 @@ def main(input_dir, map_path, no_mask):
     map_mount_source = pathlib.Path(map_path)
 
     ORB_SLAM3_ROOT = pathlib.Path("/data/ORB_SLAM3").expanduser()
-    binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/realsense_slam")
-    setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/RealSense_D435i.yaml")
-    voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
+    if stereo:
+        binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo/stereo_realsense_slam")
+        setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo/RealSense_D435i.yaml")
+        voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
+    else:
+        binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/realsense_slam")
+        setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/RealSense_D435i.yaml")
+        voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
 
     cmd = [
         str(binary_path),
@@ -77,7 +82,7 @@ def main(input_dir, map_path, no_mask):
         "--vocabulary", str(voca_path),
         "--input_video_l", str(video_l_path),
         "--input_video_r", str(video_r_path),
-        "--input_imu_csv", str(imu_csv_path),
+        "--input_df_csv", str(df_csv_path),
         "--output_trajectory_csv", str(csv_path),
         "--save_map", str(map_mount_source),
     ]
@@ -99,7 +104,7 @@ def main(input_dir, map_path, no_mask):
         stdout=stdout_path.open('w'),
         stderr=stderr_path.open('w')
     )
-    print(f"[INFO] create map {result=}")
+    print(f"[INFO] create map {result.returncode=}")
 
 
 # %%

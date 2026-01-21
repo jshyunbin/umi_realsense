@@ -49,14 +49,19 @@ def runner(cmd, cwd, stdout_path, stderr_path, timeout, **kwargs):
 @click.option('-n', '--num_workers', type=int, default=None)
 @click.option('-ml', '--max_lost_frames', type=int, default=60)
 @click.option('-tm', '--timeout_multiple', type=float, default=16, help='timeout_multiple * duration = timeout')
+@click.option('-s', '--stereo', is_flag=True, default=False, help='Use stereo SLAM instead of stereo-inertial SLAM')
 @click.option('-nm', '--no_mask', is_flag=True, default=False, help="Whether to mask out gripper and mirrors. Set if map is created with bare GoPro no on gripper.")
 def main(input_dir, 
     map_path, 
     num_workers, 
     max_lost_frames, 
     timeout_multiple, 
+    stereo,
     no_mask,
 ):
+    if stereo:
+        print("[WARN] Not using IMU data for batch SLAM.")
+        
     input_dir = pathlib.Path(os.path.expanduser(input_dir)).absolute()
     input_bag_dirs = [x.parent for x in input_dir.glob('demo*/raw_bag.bag')]
     input_bag_dirs += [x.parent for x in input_dir.glob('map*/raw_bag.bag')]
@@ -88,7 +93,7 @@ def main(input_dir,
                 csv_path = bag_dir.joinpath('camera_trajectory.csv')
                 video_l_path = bag_dir.joinpath('ir_l_video.mp4')
                 video_r_path = bag_dir.joinpath('ir_r_video.mp4')
-                imu_csv_path = bag_dir.joinpath('timestamps.csv')
+                df_csv_path = bag_dir.joinpath('timestamps.csv')
 
                 
                 # find video duration
@@ -112,9 +117,14 @@ def main(input_dir,
 
 
                 ORB_SLAM3_ROOT = pathlib.Path("/data/ORB_SLAM3").expanduser()
-                binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/realsense_slam")
-                setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/RealSense_D435i.yaml")
-                voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
+                if stereo:
+                    binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo/stereo_realsense_slam")
+                    setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo/RealSense_D435i.yaml")
+                    voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
+                else:
+                    binary_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/realsense_slam")
+                    setting_path = ORB_SLAM3_ROOT.joinpath("Examples/Stereo-Inertial/RealSense_D435i.yaml")
+                    voca_path = ORB_SLAM3_ROOT.joinpath("Vocabulary/ORBvoc.txt")
 
                 
                 # run SLAM
@@ -124,7 +134,7 @@ def main(input_dir,
                     "--vocabulary", str(voca_path),
                     "--input_video_l", str(video_l_path),
                     "--input_video_r", str(video_r_path),
-                    "--input_imu_csv", str(imu_csv_path),
+                    "--input_df_csv", str(df_csv_path),
                     '--output_trajectory_csv', str(csv_path),
                     '--load_map', str(map_path),
                     '--max_lost_frames', str(max_lost_frames)
@@ -156,7 +166,7 @@ def main(input_dir,
                 pbar.update(len(completed))
 
     print("Done! Result:")
-    print([x.result() for x in done])
+    print([x.result().returncode for x in done])
 
 # %%
 if __name__ == "__main__":

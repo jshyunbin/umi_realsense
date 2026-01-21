@@ -21,7 +21,8 @@ import subprocess
 @click.command()
 @click.argument("session_dir", nargs=-1)
 @click.option("-c", "--calibration_dir", type=str, default=None)
-def main(session_dir, calibration_dir):
+@click.option('--stereo', is_flag=True, default=False, help='Use stereo SLAM instead of stereo-inertial SLAM')
+def main(session_dir, calibration_dir, stereo):
     script_dir = pathlib.Path(__file__).parent.joinpath("scripts_slam_pipeline")
     if calibration_dir is None:
         calibration_dir = pathlib.Path(__file__).parent.joinpath(
@@ -64,6 +65,8 @@ def main(session_dir, calibration_dir):
                 "--map_path",
                 str(map_path),
             ]
+            if stereo:
+                cmd.append('--stereo')
             result = subprocess.run(cmd)
             assert result.returncode == 0, result
             assert map_path.is_file(), result
@@ -76,6 +79,8 @@ def main(session_dir, calibration_dir):
             '--input_dir', str(demo_dir),
             '--map_path', str(map_path),
         ]
+        if stereo:
+            cmd.append('--stereo')
         result = subprocess.run(cmd)
         assert result.returncode == 0
 
