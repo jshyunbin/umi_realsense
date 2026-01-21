@@ -88,7 +88,7 @@ def main(input_dir,
                 csv_path = bag_dir.joinpath('camera_trajectory.csv')
                 video_l_path = bag_dir.joinpath('ir_l_video.mp4')
                 video_r_path = bag_dir.joinpath('ir_r_video.mp4')
-                imu_csv_path = bag_dir.joinpath('imu_data.csv')
+                imu_csv_path = bag_dir.joinpath('timestamps.csv')
 
                 
                 # find video duration
