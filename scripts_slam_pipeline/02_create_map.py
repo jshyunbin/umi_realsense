@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/02_create_map.py -i /data/mapping 
+python scripts_slam_pipeline/02_create_map.py -i /data/test_collection/demos/mapping
 """
 
 # %%
@@ -48,7 +48,7 @@ def main(input_dir, map_path, no_mask):
     csv_path = bag_dir.joinpath('mapping_camera_trajectory.csv')
     video_l_path = bag_dir.joinpath('ir_l_video.mp4')
     video_r_path = bag_dir.joinpath('ir_r_video.mp4')
-    imu_csv_path = bag_dir.joinpath('imu_data.csv')
+    imu_csv_path = bag_dir.joinpath('timestamps.csv')
 
     if not no_mask:
         # left, right

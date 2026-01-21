@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/01_extract_videos.py /data/UMI
+python scripts_slam_pipeline/01_extract_videos.py /data/test_collection
 """
 import sys
 import os
@@ -8,6 +8,8 @@ import click
 import multiprocessing
 import concurrent.futures
 from tqdm import tqdm
+import pandas as pd
+import shutil
 
 
 # --- Environment Setup (Boilerplate) ---
@@ -19,8 +21,7 @@ from umi.common.bag_util import (
     bag_get_fps,
     process_bag_to_mp4,
     process_bag_to_csv,
-    BAG_VID_TOPIC,
-    BAG_VID_ENC
+    BAG_VID_NAME,
 )
 
 # --- Main CLI Function ---
@@ -35,8 +36,6 @@ def main(fps, num_workers, session_dir):
         print(f"Using {num_workers} workers.")
 
     print("--- Starting RealSense BAG to MP4 Video Conversion ---")
-    
-    vid_names = ['depth', 'ir_l', 'ir_r', 'color']
 
     for session in session_dir:
         session_path = pathlib.Path(os.path.expanduser(session)).absolute()
@@ -51,7 +50,7 @@ def main(fps, num_workers, session_dir):
 
         print(f'Found {len(input_bag_paths)} BAG files for MP4 conversion.')
 
-        total_tasks = len(input_bag_paths) * (len(vid_names) + 1)
+        total_tasks = len(input_bag_paths) * (len(BAG_VID_NAME) + 1)
         
         done = set()
 
@@ -67,10 +66,10 @@ def main(fps, num_workers, session_dir):
                     bag_fps = [round(f) for f in bag_fps]
                     if bag_fps != [fps]*4:
                         print(f"[WARNING] BAG file {bag_path.name} has non-matching FPS {bag_fps}, expected {fps}. Skipping.")
-                        pbar.update(len(vid_names))
+                        pbar.update(len(BAG_VID_NAME) + 1)
                         continue
                     
-                    for vid_name in vid_names:
+                    for vid_name in BAG_VID_NAME:
                         mp4_path = bag_dir.joinpath(f'{vid_name}_video.mp4')
                         
                         # Skip if MP4 already exists
@@ -80,7 +79,7 @@ def main(fps, num_workers, session_dir):
                             continue
 
                         mp4_future = executor.submit(
-                            process_bag_to_mp4, bag_path, mp4_path, BAG_VID_TOPIC[vid_name], fps, BAG_VID_ENC[vid_name])
+                            process_bag_to_mp4, bag_path, mp4_path, vid_name, fps)
                         futures.add(mp4_future)
                     
                         if len(futures) >= num_workers:
@@ -118,6 +117,35 @@ def main(fps, num_workers, session_dir):
         print("\nDone! Summary:")
         print(f"  Total successful MP4/IMU conversions: {len(results)}")
         print(f"  Total conversion failures: {len(errors)}")
+        
+        print("Now matching timestamps...")
+        
+        with tqdm(total=len(input_bag_paths), desc="Matching Timestamps") as pbar:
+            for bag_path in input_bag_paths:
+                bag_dir = bag_path.parent
+                df = pd.read_csv(bag_dir.joinpath('imu_data.csv'))
+                
+                for vid_name in BAG_VID_NAME:
+                    ts_path = bag_dir.joinpath('timestamps', f'{vid_name}.txt')
+                    if not ts_path.is_file():
+                        print(f"[WARNING] Timestamp file {ts_path} not found. Skipping.")
+                        pbar.update()
+                        continue
+                    with open(ts_path, 'r') as ts_f:
+                        data = ts_f.read()
+                        stamp_dict = dict()
+                        lines = data.splitlines()
+                        lines = [float(x) for x in lines]
+                        
+                        stamp_dict = {"Time": lines, f"{vid_name}_idx": range(len(lines))}
+                        
+                        df = df.merge(pd.DataFrame.from_dict(stamp_dict), how='outer').sort_values('Time')
+                shutil.rmtree(bag_dir.joinpath('timestamps'))
+                os.remove(bag_dir.joinpath('imu_data.csv'))
+                
+                df["Time"] = df["Time"] - df["Time"].iloc[0]
+                df.to_csv(bag_dir.joinpath('timestamps.csv'), index=False)
+                pbar.update()
 
 # %%
 if __name__ == "__main__":
