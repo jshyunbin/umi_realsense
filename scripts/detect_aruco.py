@@ -63,12 +63,6 @@ def main(input, output, intrinsics_json, aruco_yaml, num_workers):
         
         for i, frame in tqdm(enumerate(in_container.decode(in_stream)), total=in_stream.frames):
             img = frame.to_ndarray(format='rgb24')
-            frame_cts_sec = frame.pts * in_stream.time_base
-            # avoid detecting tags in the mirror
-
-            img = draw_rgb_predefined_mask(
-                img, color=(0,0,0), mirror=True, gripper=False, finger=False
-            )
             
             tag_dict = detect_localize_aruco_tags(
                 img=img,

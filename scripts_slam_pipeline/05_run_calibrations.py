@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/05_run_calibrations.py /data/UMI
+python scripts_slam_pipeline/05_run_calibrations.py /data/test_collection
 """
 # %%
 import sys
