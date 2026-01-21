@@ -1,6 +1,6 @@
 """
 python scripts_slam_pipeline/04_detect_aruco.py \
--i /data/UMI/demos \
+-i /data/test_collection/demos \
 -ci ./example/calibration/realsense_intrinsics.json \
 -ac ./example/calibration/aruco_config.yaml
 """

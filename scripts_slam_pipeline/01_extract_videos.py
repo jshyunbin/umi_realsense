@@ -137,7 +137,7 @@ def main(fps, num_workers, session_dir):
                         lines = data.splitlines()
                         lines = [float(x) for x in lines]
                         
-                        stamp_dict = {"Time": lines, f"{vid_name}_idx": range(len(lines))}
+                        stamp_dict = {"Time": lines, f"{vid_name}_idx": list(range(len(lines)))}
                         
                         df = df.merge(pd.DataFrame.from_dict(stamp_dict), how='outer').sort_values('Time')
                 shutil.rmtree(bag_dir.joinpath('timestamps'))

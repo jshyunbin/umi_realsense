@@ -15,6 +15,8 @@ import av
 import numpy as np
 import cv2
 import pickle
+from pathlib import Path
+import pandas as pd
 
 from umi.common.cv_util_realsense import (
     parse_aruco_config, 
@@ -22,7 +24,6 @@ from umi.common.cv_util_realsense import (
     convert_intrinsics_resolution,
     detect_localize_aruco_tags,
     draw_rgb_predefined_mask
-    # draw_predefined_mask
 )
 
 # %%
@@ -40,6 +41,12 @@ def main(input, output, intrinsics_json, aruco_yaml, num_workers):
     aruco_config = parse_aruco_config(yaml.safe_load(open(aruco_yaml, 'r')))
     aruco_dict = aruco_config['aruco_dict']
     marker_size_map = aruco_config['marker_size_map']
+    
+    # load camera timestamps
+    timestamp_dir = Path(input).parent.joinpath('timestamps.csv')
+    assert timestamp_dir.is_file(), f"Cannot find timestamps.csv at {timestamp_dir}"
+    df = pd.read_csv(timestamp_dir)
+    df = df[~df['color_idx'].isna()][['Time', 'color_idx']].set_index('color_idx')
 
     # load intrinsics
     raw_realsense_intr = parse_realsense_intrinsics(json.load(open(intrinsics_json, 'r')))
@@ -73,7 +80,7 @@ def main(input, output, intrinsics_json, aruco_yaml, num_workers):
 
             result = {
                 'frame_idx': i,
-                'time': float(frame_cts_sec),
+                'time': df.iloc[i]['Time'],
                 'tag_dict': tag_dict
             }
             results.append(result)
