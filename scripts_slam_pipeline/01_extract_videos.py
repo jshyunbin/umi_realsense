@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/01_extract_videos.py /data/UMI
+python scripts_slam_pipeline/01_extract_videos.py /data/test_collection
 """
 import sys
 import os
@@ -8,87 +8,21 @@ import click
 import multiprocessing
 import concurrent.futures
 from tqdm import tqdm
+import pandas as pd
+import shutil
 
-# ROS and CV dependencies (MUST be installed and configured in the environment)
-try:
-    import rosbag
-    from cv_bridge import CvBridge
-    import cv2
-    from sensor_msgs.msg import Image
-except ImportError:
-    print("FATAL ERROR: ROS libraries (rosbag, cv_bridge, cv2) must be installed and sourced.")
-    sys.exit(1)
 
 # --- Environment Setup (Boilerplate) ---
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(ROOT_DIR)
 os.chdir(ROOT_DIR)
 
-from umi.common.bag_util import bag_get_fps
-
-# --- Helper Function: BAG to MP4 Conversion ---
-
-def process_bag_to_mp4(bag_path, mp4_path, color_topic_name, fps=30, enc="bgr8"):
-    """
-    Core conversion function: Reads the color image topic from a BAG file and saves it as an MP4.
-    
-    Args:
-        bag_path (pathlib.Path): Path to the source raw_bag.bag file.
-        mp4_path (pathlib.Path): Path to the target raw_video.mp4 file.
-        color_topic_name (str): ROS topic name for the color image stream.
-        fps (int): Target frame rate for the output MP4 video.
-    
-    Returns:
-        bool: True if conversion was successful, False otherwise.
-    """
-    # print(f"[MP4] Converting {bag_path.parent.name} to {mp4_path.name}...")
-    
-    bridge = CvBridge()
-    video_writer = None
-    success = False
-    
-    try:
-        with rosbag.Bag(str(bag_path), 'r') as bag:
-            is_first_frame = True
-            
-            # Read BAG file and write frames to video
-            for _, msg, _ in bag.read_messages(topics=[color_topic_name]):
-                # Check for correct message type
-                if msg._type != Image._type: 
-                     continue
-                
-                # Convert image message to OpenCV Mat object
-                cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding=enc)
-                
-                if is_first_frame:
-                    if enc == "bgr8":
-                        height, width, _ = cv_image.shape
-                    else:
-                        height, width = cv_image.shape
-                    
-                    # VideoWriter setup (Using 'mp4v' codec for broad compatibility)
-                    fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
-                    # Use absolute path for robustness
-                    video_writer = cv2.VideoWriter(str(mp4_path.absolute()), fourcc, fps, (width, height), isColor=(enc == "bgr8"))
-                    is_first_frame = False
-                    # print(f"[MP4] Writer initialized for {bag_path.parent.name}: {width}x{height} @ {fps} FPS")
-
-                if video_writer is not None:
-                    video_writer.write(cv_image)
-            
-            success = video_writer is not None and not is_first_frame
-            
-    except Exception as e:
-        print(f"[MP4] Conversion failed for {bag_path.parent.name}/{mp4_path.name} due to an exception: {e}")
-        success = False
-    finally:
-        if video_writer is not None:
-            video_writer.release()
-            
-    if not success:
-        print(f"[MP4] Conversion failed for {bag_path.parent.name}: No image frames found or initialization failed.")
-        
-    return success
+from umi.common.bag_util import (
+    bag_get_fps,
+    process_bag_to_mp4,
+    process_bag_to_csv,
+    BAG_VID_NAME,
+)
 
 # --- Main CLI Function ---
 
@@ -102,14 +36,6 @@ def main(fps, num_workers, session_dir):
         print(f"Using {num_workers} workers.")
 
     print("--- Starting RealSense BAG to MP4 Video Conversion ---")
-    
-    topics = ['/device_0/sensor_0/Depth_0/image/data', 
-              '/device_0/sensor_0/Infrared_1/image/data', 
-              '/device_0/sensor_0/Infrared_2/image/data',
-              '/device_0/sensor_1/Color_0/image/data']
-    
-    vid_path_names = ['depth_video.mp4', 'ir_l_video.mp4', 'ir_r_video.mp4', 'color_video.mp4']
-    encodings = ['mono16', '8UC1', '8UC1', 'bgr8']
 
     for session in session_dir:
         session_path = pathlib.Path(os.path.expanduser(session)).absolute()
@@ -124,7 +50,7 @@ def main(fps, num_workers, session_dir):
 
         print(f'Found {len(input_bag_paths)} BAG files for MP4 conversion.')
 
-        total_tasks = len(input_bag_paths) * len(topics)
+        total_tasks = len(input_bag_paths) * (len(BAG_VID_NAME) + 1)
         
         done = set()
 
@@ -135,50 +61,99 @@ def main(fps, num_workers, session_dir):
                 
                 for bag_path in input_bag_paths:
                     bag_dir = bag_path.parent 
-                    mp4_path = bag_dir.joinpath('raw_video.mp4')
+                    extract_dir = bag_dir.joinpath('extracted_data')
+                    extract_dir.mkdir(parents=True, exist_ok=True)
                     
                     bag_fps = bag_get_fps(str(bag_path))
                     bag_fps = [round(f) for f in bag_fps]
                     if bag_fps != [fps]*4:
                         print(f"[WARNING] BAG file {bag_path.name} has non-matching FPS {bag_fps}, expected {fps}. Skipping.")
-                        pbar.update(len(topics))
+                        pbar.update(len(BAG_VID_NAME) + 1)
                         continue
                     
-                    for topic_name, vid_name, enc in zip(topics, vid_path_names, encodings):
-                        mp4_path = bag_dir.joinpath(vid_name)
+                    for vid_name in BAG_VID_NAME:
+                        mp4_path = extract_dir.joinpath(f'{vid_name}_video.mp4')
                         
                         # Skip if MP4 already exists
                         if mp4_path.is_file():
-                            print(f"[INFO] {bag_dir.name}/raw_video.mp4 already exists. Skipping.")
-                            pbar.update(1)
+                            print(f"[INFO] {extract_dir.parent.name}/{extract_dir.name}/{vid_name}_video.mp4 already exists. Skipping.")
+                            pbar.update()
                             continue
 
-                        # MP4 추출 작업 예약
                         mp4_future = executor.submit(
-                            process_bag_to_mp4, bag_path, mp4_path, topic_name, fps, enc)
+                            process_bag_to_mp4, bag_path, mp4_path, vid_name, fps)
                         futures.add(mp4_future)
                     
-                        # 완료된 작업 처리 및 tqdm 업데이트
                         if len(futures) >= num_workers:
                             completed, futures = concurrent.futures.wait(futures,
                                 return_when=concurrent.futures.FIRST_COMPLETED)
                             done.update(completed)
                             pbar.update(len(completed))
+                    
+                    csv_path = extract_dir.joinpath(f'imu_data.csv')
+                    
+                    if csv_path.is_file():
+                        print(f"[INFO] {extract_dir.parent.name}/{extract_dir.name}/imu_data.csv already exists. Skipping.")
+                        pbar.update()
+                        continue
+
+                    imu_future = executor.submit(
+                        process_bag_to_csv, bag_path, csv_path)
+                    futures.add(imu_future)
+
+                    if len(futures) >= num_workers:
+                        completed, futures = concurrent.futures.wait(futures,
+                            return_when=concurrent.futures.FIRST_COMPLETED)
+                        done.update(completed)
+                        pbar.update(len(completed))
                             
 
-                # 남아있는 모든 작업 완료 대기
                 while futures:
                     completed, futures = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
                     done.update(completed)
                     pbar.update(len(completed))
 
-        # 결과 요약
         results = [x.result() for x in done if x.result() is True]
         errors = [x.result() for x in done if x.result() is False]
         
         print("\nDone! Summary:")
-        print(f"  Total successful MP4 conversions: {len(results)}")
+        print(f"  Total successful MP4/IMU conversions: {len(results)}")
         print(f"  Total conversion failures: {len(errors)}")
+        
+        print("Now matching timestamps...")
+        
+        with tqdm(total=len(input_bag_paths), desc="Matching Timestamps") as pbar:
+            for bag_path in input_bag_paths:
+                bag_dir = bag_path.parent
+                extract_dir = bag_dir.joinpath('extracted_data')
+                
+                if extract_dir.joinpath('timestamps.csv').is_file():
+                    print(f"[INFO] {extract_dir.parent.name}/{extract_dir.name}/timestamps.csv already exists. Skipping.")
+                    pbar.update()
+                    continue
+                
+                df = pd.read_csv(extract_dir.joinpath('imu_data.csv'))
+                
+                for vid_name in BAG_VID_NAME:
+                    ts_path = extract_dir.joinpath('timestamps', f'{vid_name}.txt')
+                    if not ts_path.is_file():
+                        print(f"[WARNING] Timestamp file {ts_path} not found. Skipping.")
+                        pbar.update()
+                        continue
+                    with open(ts_path, 'r') as ts_f:
+                        data = ts_f.read()
+                        stamp_dict = dict()
+                        lines = data.splitlines()
+                        lines = [float(x) for x in lines]
+                        
+                        stamp_dict = {"Time": lines, f"{vid_name}_idx": list(range(len(lines)))}
+                        
+                        df = df.merge(pd.DataFrame.from_dict(stamp_dict), how='outer').sort_values('Time')
+                shutil.rmtree(extract_dir.joinpath('timestamps'))
+                
+                df["Time"] = df["Time"] - df["Time"].iloc[0]
+                df.to_csv(extract_dir.joinpath('timestamps.csv'), index=False)
+                pbar.update()
 
 # %%
 if __name__ == "__main__":

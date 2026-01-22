@@ -250,8 +250,8 @@ def draw_im_l_infrared_mask(img, color=(0,0,0),*,mirror=True, gripper=True, fing
         (80, 405),
         (93, 322),
         (116, 318),
-        (448, 312),
-        (467, 350),
+        (464, 312),
+        (477, 346),
         (448, 480),
     )
     
@@ -259,9 +259,9 @@ def draw_im_l_infrared_mask(img, color=(0,0,0),*,mirror=True, gripper=True, fing
         (116, 318),
         (177, 266),
         (243, 236),
-        (345, 237),
-        (416, 275),
-        (448, 312),
+        (360, 237),
+        (422, 266),
+        (464, 312),
     )
 
     gripper_coords = np.stack([pixel_coords_to_canonical(gripper_pts, IR_IMG_SHAPE)])

@@ -8,6 +8,9 @@ outputs
 wandb
 **/.DS_Store
 *.lprof
+memo.txt
+jetson_scripts
+scripts_slam_pipeline/test.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

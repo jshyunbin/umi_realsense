@@ -1,5 +1,5 @@
 """
-python scripts_slam_pipeline/05_run_calibrations.py /data/UMI
+python scripts_slam_pipeline/05_run_calibrations.py /data/test_collection
 """
 # %%
 import sys
@@ -24,12 +24,12 @@ def main(session_dir):
         session = pathlib.Path(session)
         demos_dir = session.joinpath('demos')
         mapping_dir = demos_dir.joinpath('mapping')
-        slam_tag_path = mapping_dir.joinpath('tx_slam_tag.json')
+        slam_tag_path = mapping_dir.joinpath('extracted_data', 'tx_slam_tag.json')
             
         # run slam tag calibration
         script_path = script_dir.joinpath('calibrate_slam_tag.py')
         assert script_path.is_file()
-        tag_path = mapping_dir.joinpath('tag_detection.pkl')
+        tag_path = mapping_dir.joinpath('extracted_data', 'tag_detection.pkl')
         print("test", tag_path)
         assert tag_path.is_file()
         csv_path = mapping_dir.joinpath('camera_trajectory.csv')
@@ -43,7 +43,7 @@ def main(session_dir):
             '--tag_detection', str(tag_path),
             '--csv_trajectory', str(csv_path),
             '--output', str(slam_tag_path),
-            '--keyframe_only'
+            # '--keyframe_only'
         ]
         subprocess.run(cmd)
         
@@ -52,8 +52,8 @@ def main(session_dir):
         assert script_path.is_file()
         
         for gripper_dir in demos_dir.glob("gripper_calibration*"):
-            gripper_range_path = gripper_dir.joinpath('gripper_range.json')
-            tag_path = gripper_dir.joinpath('tag_detection.pkl')
+            gripper_range_path = gripper_dir.joinpath('extracted_data', 'gripper_range.json')
+            tag_path = gripper_dir.joinpath('extracted_data', 'tag_detection.pkl')
             assert tag_path.is_file()
             cmd = [
                 'python', str(script_path),
